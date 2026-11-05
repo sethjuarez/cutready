@@ -34,7 +34,7 @@ import { useAppStore } from "./appStore";
 import { useSyncStore } from "./syncStore";
 import { activeTimelineLabel, askMergeName } from "../services/mergeName";
 import { deleteSetAsideShelf, listSetAsideShelves, restoreSetAsideShelf, setAsideChanges } from "../services/setAsideShelves";
-import { DEFAULT_SET_ASIDE_NAME, type SetAsideShelf } from "../domain/versioning";
+import { DEFAULT_SET_ASIDE_NAME, type IncomingVersion, type SetAsideShelf } from "../domain/versioning";
 import {
   clearActiveDocumentState,
   currentWorkspaceGeneration,
@@ -92,6 +92,8 @@ export interface VersioningState {
   draftlineMergeToken: DraftlineMergeIncomingToken | null;
   /** Remote that produced the currently displayed incoming conflict set. */
   draftlineMergeRemote: string | null;
+  /** Versions the displayed conflict set brings in, for naming the merge. */
+  draftlineMergeIncoming: IncomingVersion[];
 
   // ── Diff ──────────────────────────────────────────────────
   /** Currently selected diff result (file changes between two snapshots). */
@@ -202,6 +204,7 @@ export function resetVersioningState(): Omit<VersioningState, "saving"> {
     mergeConflicts: [],
     draftlineMergeToken: null,
     draftlineMergeRemote: null,
+    draftlineMergeIncoming: [],
     diffResult: null,
     diffSelection: null,
   };
@@ -673,12 +676,12 @@ export const useVersioningStore = create<VersioningStoreState>((set, get) => ({
   },
 
   applyMergeResolution: async (resolutions) => {
-    const { draftlineMergeToken, draftlineMergeRemote } = get();
+    const { draftlineMergeToken, draftlineMergeRemote, draftlineMergeIncoming } = get();
     if (!draftlineMergeToken || !draftlineMergeRemote) throw new Error("No Draftline merge in progress");
 
     // Base merges carry the base branch name as the token source.
     const base = (draftlineMergeToken as { source?: string | null }).source ?? null;
-    const message = await askMergeName(base ?? activeTimelineLabel(get().timelines) ?? draftlineMergeRemote);
+    const message = await askMergeName(base ?? activeTimelineLabel(get().timelines) ?? draftlineMergeRemote, draftlineMergeIncoming);
     if (!message) return null;
     const commitId = await mergeDraftlineIncomingWithResolutions(
       draftlineMergeToken,
@@ -697,6 +700,7 @@ export const useVersioningStore = create<VersioningStoreState>((set, get) => ({
       mergeConflicts: [],
       draftlineMergeToken: null,
       draftlineMergeRemote: null,
+      draftlineMergeIncoming: [],
     });
     await app().loadSketches();
     await app().loadStoryboards();
@@ -719,6 +723,7 @@ export const useVersioningStore = create<VersioningStoreState>((set, get) => ({
       mergeConflicts: [],
       draftlineMergeToken: null,
       draftlineMergeRemote: null,
+      draftlineMergeIncoming: [],
     });
   },
 }));

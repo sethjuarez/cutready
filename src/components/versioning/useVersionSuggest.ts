@@ -7,12 +7,15 @@ export interface SuggestFields {
   comment: string;
 }
 
-export interface VersionSuggestDeps {
+/** What Suggest describes is `S`: the unsaved changes by default, or e.g. a merge's incoming versions. */
+export interface VersionSuggestDeps<S = ChangeSummary> {
   isConfigured: () => Promise<boolean>;
-  suggest: (summary: ChangeSummary) => Promise<VersionSuggestion | null>;
-  getSummary: () => ChangeSummary | null;
+  suggest: (summary: S) => Promise<VersionSuggestion | null>;
+  getSummary: () => S | null;
   isOnline: () => boolean;
 }
+
+export type VersionSuggestState = ReturnType<typeof useVersionSuggest>;
 
 export type SuggestStatus = "idle" | "running" | "failed";
 
@@ -21,16 +24,18 @@ export type SuggestStatus = "idle" | "running" | "failed";
  * (a newer click or Esc wins), fills empty fields, and holds a suggestion for
  * a "Replace?" confirmation when the user has typed.
  */
-export function useVersionSuggest(
+export function useVersionSuggest<S = ChangeSummary>(
   fields: SuggestFields,
   setFields: (fields: SuggestFields) => void,
-  deps: VersionSuggestDeps,
+  deps: VersionSuggestDeps<S>,
+  /** Prefilled text the app wrote, which Suggest may replace without asking. */
+  replaceable: SuggestFields | null = null,
 ) {
   const [configured, setConfigured] = useState(false);
   const [status, setStatus] = useState<SuggestStatus>("idle");
   const [pending, setPending] = useState<SuggestFields | null>(null);
   const generation = useRef(0);
-  const lastSuggested = useRef<SuggestFields | null>(null);
+  const lastSuggested = useRef<SuggestFields | null>(replaceable);
   const depsRef = useRef(deps);
   depsRef.current = deps;
   const fieldsRef = useRef(fields);

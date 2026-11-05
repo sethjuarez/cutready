@@ -1,9 +1,12 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { GitMerge } from "lucide-react";
-import { versionMessage, versionNameError } from "../../domain/versioning";
+import { versionMessage, versionNameError, type IncomingVersion } from "../../domain/versioning";
+import { isSuggestConfigured, suggestMergeName } from "../../services/versionSuggest";
 import { useMergeNameStore, type PendingMergeName } from "../../stores/mergeNameStore";
 import { Dialog } from "../Dialog";
 import { VersionNameFields, type VersionNameDraft } from "./VersionNameFields";
+import { SuggestButton, SuggestNotices } from "./SuggestControls";
+import { useVersionSuggest, type VersionSuggestDeps } from "./useVersionSuggest";
 
 const primaryClass =
   "inline-flex h-7 items-center justify-center gap-1.5 rounded-control bg-[rgb(var(--color-accent))] px-3 text-xs font-medium text-[rgb(var(--color-accent-fg))] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))] focus-visible:ring-offset-1";
@@ -22,6 +25,14 @@ export function MergeNameHost() {
 function MergeNameForm({ pending, onAnswer }: { pending: PendingMergeName; onAnswer: (message: string | null) => void }) {
   const [draft, setDraft] = useState<VersionNameDraft>({ name: pending.defaultName, comment: "" });
   const error = versionNameError(draft.name);
+  // ✨ Suggest names the merge from the versions it brings in, not from local work.
+  const deps = useMemo<VersionSuggestDeps<IncomingVersion[]>>(() => ({
+    isConfigured: () => isSuggestConfigured(),
+    suggest: (versions) => suggestMergeName(pending.source, versions),
+    getSummary: () => (pending.incoming.length > 0 ? pending.incoming : null),
+    isOnline: () => (typeof navigator === "undefined" ? true : navigator.onLine),
+  }), [pending]);
+  const suggest = useVersionSuggest(draft, setDraft, deps, { name: pending.defaultName, comment: "" });
 
   return (
     <form
@@ -29,6 +40,12 @@ function MergeNameForm({ pending, onAnswer }: { pending: PendingMergeName; onAns
       onSubmit={(event) => {
         event.preventDefault();
         if (!error) onAnswer(versionMessage(draft.name, draft.comment));
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && suggest.cancel()) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
       }}
       data-testid="merge-name-dialog"
     >
@@ -41,7 +58,13 @@ function MergeNameForm({ pending, onAnswer }: { pending: PendingMergeName; onAns
           </p>
         </div>
       </div>
-      <VersionNameFields draft={draft} onChange={setDraft} nameTestId="merge-name-input" />
+      <VersionNameFields
+        draft={draft}
+        onChange={setDraft}
+        nameTestId="merge-name-input"
+        nameAction={pending.incoming.length > 0 ? <SuggestButton suggest={suggest} testId="merge-name-suggest" /> : undefined}
+        notices={<SuggestNotices suggest={suggest} />}
+      />
       <div className="flex justify-end gap-2">
         <button type="button" onClick={() => onAnswer(null)} className="h-7 rounded-control px-2 text-xs text-[rgb(var(--color-text-secondary))] hover:bg-fill-hover">
           Cancel

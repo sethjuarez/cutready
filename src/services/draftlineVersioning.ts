@@ -29,6 +29,7 @@ import {
 import { invoke as rawInvoke, listen } from "./tauri";
 import { gateWorkspaceWrites } from "./workspaceWriteGate";
 import { DraftlineVariationCreateConflictError, variationCreatePreflightFromError } from "./draftlineVariationConflict";
+import { incomingVersions, type IncomingVersion } from "../domain/versioning/mergeSuggest";
 import type { BaseStatus, ConflictFile, DiffEntry, GraphNode, IncomingCommit, RemoteBranchInfo, RemoteInfo, SyncStatus, TimelineInfo, VersionEntry } from "../types/sketch";
 
 export type DraftlineMergeIncomingToken = MergeIncomingToken;
@@ -55,6 +56,8 @@ export interface DraftlineMergeIncomingReport {
   canMergeCleanly: boolean;
   changedWorkspace: boolean;
   viewModel: MergeConflictViewModel;
+  /** The versions the merge brings in, for naming it. */
+  incoming: IncomingVersion[];
 }
 
 export interface DraftlinePreviewFile {
@@ -756,6 +759,7 @@ function mergeIncomingReportToDto(report: MergeIncomingReport): DraftlineMergeIn
     canMergeCleanly: report.can_merge_cleanly,
     changedWorkspace: report.changed_workspace,
     viewModel,
+    incoming: incomingVersions(report.sync_status.incoming),
   };
 }
 

@@ -1,4 +1,4 @@
-import { clampVersionName } from "../domain/versioning";
+import { clampVersionName, type IncomingVersion } from "../domain/versioning";
 import { useMergeNameStore } from "../stores/mergeNameStore";
 import { currentWorkspaceGeneration } from "../stores/workspaceHelpers";
 import type { TimelineInfo } from "../types/sketch";
@@ -19,9 +19,9 @@ export function activeTimelineLabel(timelines: readonly TimelineInfo[]): string 
  * message, or null when they cancel or the project changes; the caller must
  * then not merge.
  */
-export async function askMergeName(source: string): Promise<string | null> {
+export async function askMergeName(source: string, incoming: IncomingVersion[] = []): Promise<string | null> {
   const generation = currentWorkspaceGeneration();
-  const message = await useMergeNameStore.getState().ask(source, defaultMergeName(source));
+  const message = await useMergeNameStore.getState().ask(source, defaultMergeName(source), incoming);
   // The project changed while the prompt was open: never merge into the new one.
   return generation === currentWorkspaceGeneration() ? message : null;
 }

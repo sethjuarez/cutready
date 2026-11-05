@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { MAX_VERSION_NAME, normalizeVersionName, versionMessage, versionNameError } from "../../domain/versioning";
 import { useContributorIdentity } from "../../hooks/useContributorIdentity";
 import { setContributorIdentity } from "../../services/identity";
@@ -8,6 +8,7 @@ import { isSuggestConfigured, suggestVersion } from "../../services/versionSugge
 import { useChangeSummaryStore } from "../../stores/changeSummaryStore";
 import { useVersioningStore } from "../../stores/versioningStore";
 import { useVersionSuggest, type SuggestFields, type VersionSuggestDeps } from "./useVersionSuggest";
+import { SuggestButton, SuggestNotices } from "./SuggestControls";
 import { VersionIdentityFields, type IdentityDraft } from "./VersionIdentityFields";
 
 const suggestDeps: VersionSuggestDeps = {
@@ -19,8 +20,6 @@ const suggestDeps: VersionSuggestDeps = {
 
 const inputClass =
   "w-full rounded-control border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-2 py-1 text-xs text-[rgb(var(--color-text))] placeholder:text-[rgb(var(--color-text-secondary))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]";
-const iconButtonClass =
-  "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-[rgb(var(--color-text-secondary))] hover:bg-fill-hover hover:text-[rgb(var(--color-accent))] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]";
 const primaryClass =
   "inline-flex h-7 items-center justify-center gap-1.5 rounded-control bg-[rgb(var(--color-accent))] px-3 text-xs font-medium text-[rgb(var(--color-accent-fg))] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))] focus-visible:ring-offset-1";
 
@@ -159,17 +158,7 @@ export function VersionForm({
           data-testid="version-name-input"
           autoComplete="off"
         />
-        <button
-          type="button"
-          onClick={() => void suggest.run()}
-          disabled={!!suggest.disabledReason || suggest.status === "running"}
-          className={iconButtonClass}
-          title={suggest.disabledReason ?? (suggest.status === "running" ? "Suggesting… (Esc to cancel)" : "Suggest a name")}
-          aria-label={suggest.status === "running" ? "Suggesting a name. Press Escape to cancel." : "Suggest a name"}
-          data-testid="version-suggest"
-        >
-          {suggest.status === "running" ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />}
-        </button>
+        <SuggestButton suggest={suggest} testId="version-suggest" />
       </div>
       {showComment && (
         <textarea
@@ -181,16 +170,7 @@ export function VersionForm({
           aria-label="Comment"
         />
       )}
-      {suggest.pending && (
-        <div role="alert" className="flex items-center gap-2 rounded-control bg-[rgb(var(--color-surface-alt))] px-2 py-1.5 text-2xs text-[rgb(var(--color-text))]">
-          <span className="min-w-0 flex-1 truncate" title={suggest.pending.name}>Replace with “{suggest.pending.name}”?</span>
-          <button type="button" onClick={suggest.confirmReplace} className="font-medium text-[rgb(var(--color-accent))] hover:underline">Replace</button>
-          <button type="button" onClick={suggest.keepMine} className="text-[rgb(var(--color-text-secondary))] hover:underline">Keep mine</button>
-        </div>
-      )}
-      {suggest.status === "failed" && (
-        <p className="text-2xs text-[rgb(var(--color-text-secondary))]" role="status">Couldn't suggest a name. Try again or type one.</p>
-      )}
+      <SuggestNotices suggest={suggest} />
       {(showNameError || error) && (
         <p id={errorId} className="text-2xs text-error" role="alert">{error ?? nameError}</p>
       )}

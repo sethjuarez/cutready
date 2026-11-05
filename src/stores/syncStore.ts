@@ -353,7 +353,7 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
         if (state === "needsMerge" && preflight.dirtyFiles.length === 0) {
           const mergeReport = await preflightDraftlineMergeIncoming(currentRemote.name);
           if (mergeReport.canMergeCleanly && mergeReport.token) {
-            const message = await askMergeName(activeTimelineLabel(versioning().timelines) ?? currentRemote.name);
+            const message = await askMergeName(activeTimelineLabel(versioning().timelines) ?? currentRemote.name, mergeReport.incoming);
             if (!message) return;
             await mergeDraftlineIncoming(currentRemote.name, message);
             await app().loadSketches();
@@ -377,6 +377,7 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
               mergeConflicts: mergeReport.conflicts,
               draftlineMergeToken: mergeReport.token,
               draftlineMergeRemote: currentRemote.name,
+              draftlineMergeIncoming: mergeReport.incoming,
             });
             set({
               syncError: null,
@@ -434,7 +435,7 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
       if (report.dirtyFiles.length > 0) {
         updateError = `Save or discard local changes before getting updates from ${base}.`;
       } else if (report.canMergeCleanly && report.token) {
-        const message = await askMergeName(base);
+        const message = await askMergeName(base, report.incoming);
         if (message) {
           await mergeDraftlineFromBase(currentRemote.name, message);
           useToastStore.getState().showUpdate(`Updates from ${base} brought in.`, "success");
@@ -447,6 +448,7 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
           mergeConflicts: report.conflicts,
           draftlineMergeToken: report.token,
           draftlineMergeRemote: currentRemote.name,
+          draftlineMergeIncoming: report.incoming,
         });
         useToastStore.getState().showUpdate(`Updates from ${base} need conflict resolution.`, "info");
       } else if (report.syncStatus.behind === 0) {

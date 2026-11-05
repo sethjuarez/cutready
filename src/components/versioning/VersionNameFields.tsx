@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { MAX_VERSION_NAME, versionNameError } from "../../domain/versioning";
 
 export interface VersionNameDraft {
@@ -17,10 +17,16 @@ export function VersionNameFields({
   draft,
   onChange,
   nameTestId,
+  nameAction,
+  notices,
 }: {
   draft: VersionNameDraft;
   onChange: (draft: VersionNameDraft) => void;
   nameTestId: string;
+  /** Shown beside the name, e.g. ✨ Suggest. */
+  nameAction?: ReactNode;
+  /** Shown under the comment, e.g. Suggest's Replace? prompt. */
+  notices?: ReactNode;
 }) {
   const nameRef = useRef<HTMLInputElement>(null);
   const nameId = useId();
@@ -40,17 +46,20 @@ export function VersionNameFields({
           {chars}/{MAX_VERSION_NAME}
         </span>
       </div>
-      <input
-        id={nameId}
-        ref={nameRef}
-        value={draft.name}
-        onChange={(event) => onChange({ ...draft, name: event.target.value })}
-        className={inputClass}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error ? errorId : undefined}
-        data-testid={nameTestId}
-        autoComplete="off"
-      />
+      <div className="flex items-center gap-1">
+        <input
+          id={nameId}
+          ref={nameRef}
+          value={draft.name}
+          onChange={(event) => onChange({ ...draft, name: event.target.value })}
+          className={inputClass}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? errorId : undefined}
+          data-testid={nameTestId}
+          autoComplete="off"
+        />
+        {nameAction}
+      </div>
       <textarea
         value={draft.comment}
         onChange={(event) => onChange({ ...draft, comment: event.target.value })}
@@ -59,6 +68,7 @@ export function VersionNameFields({
         className={`${inputClass} resize-none`}
         aria-label="Comment"
       />
+      {notices}
       {error && <p id={errorId} className="text-2xs text-error" role="alert">{error}</p>}
     </div>
   );
