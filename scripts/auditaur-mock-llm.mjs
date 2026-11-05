@@ -13,6 +13,7 @@
 //   MOCK:read-note <path>  -> a read_note tool call; the follow-up turn echoes the tool result
 //   MOCK:slow              -> a long stream (cancellation drills)
 //   MOCK:error             -> HTTP 500
+//   a ✨ Suggest request   -> {"name": "Mock version name" | "Mock merge name", "comment": ...}
 //   anything else          -> "MOCK-REPLY-OK"
 
 import { createServer } from "node:http";
@@ -66,8 +67,11 @@ const server = createServer(async (req, res) => {
   const messages = request.messages ?? [];
   const last = messages.at(-1);
   const userText = textOf([...messages].reverse().find((message) => message.role === "user"));
+  const systemText = textOf(messages.find((message) => message.role === "system"));
+  const suggest = systemText.startsWith("You name versions") ? "version" : systemText.startsWith("You name merges") ? "merge" : undefined;
   log({
     path,
+    suggest,
     model: request.model,
     stream: Boolean(request.stream),
     tools: (request.tools ?? []).map((tool) => tool.function?.name ?? tool.name),
@@ -78,6 +82,8 @@ const server = createServer(async (req, res) => {
 
   if (/MOCK:error/.test(userText)) return json(res, 500, { error: { message: "MOCK-PROVIDER-ERROR", type: "server_error" } });
   if (last?.role === "tool") return reply(res, request, { text: `MOCK-TOOL-RESULT ${textOf(last).slice(0, 400)}` });
+  if (suggest === "version") return reply(res, request, { text: JSON.stringify({ name: "Mock version name", comment: "Mock version comment." }) });
+  if (suggest === "merge") return reply(res, request, { text: JSON.stringify({ name: "Mock merge name", comment: "Mock merge comment." }) });
   const readNote = userText.match(/MOCK:read-note\s+(\S+)/);
   if (readNote) return reply(res, request, { toolCall: { name: "read_note", args: { path: readNote[1] } } });
   if (/MOCK:slow/.test(userText)) return reply(res, request, { text: "MOCK-SLOW ".repeat(600), delayMs: 100, chunk: 10, tag: "slow" });
