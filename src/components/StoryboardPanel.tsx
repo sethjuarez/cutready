@@ -9,7 +9,7 @@ import { DatabaseViewer } from "./DatabaseViewer";
 import { ChatArtifactViewer } from "./ChatArtifactViewer";
 import { ResizeHandle } from "./ResizeHandle";
 import { TabBar } from "./TabBar";
-import { HistoryGraphTab } from "./HistoryGraphTab";
+import { HistoryTab } from "./history/HistoryTab";
 import { SnapshotPreviewTab } from "./SnapshotPreviewTab";
 import { SplitTabBar, SplitPaneContent } from "./SplitPreviewPane";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -85,11 +85,11 @@ export function StoryboardPanel() {
               <ErrorBoundary
                 fallback={
                   <div className="flex-1 flex items-center justify-center text-sm text-[rgb(var(--color-error))]">
-                    History graph failed to render
+                    History failed to render
                   </div>
                 }
               >
-                <HistoryGraphTab />
+                <HistoryTab />
               </ErrorBoundary>
             ) : isSnapshotPreviewTab && activeTab ? (
               <SnapshotPreviewTab snapshotId={snapshotIdFromTabPath(activeTab.path)} />

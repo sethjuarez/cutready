@@ -1,0 +1,99 @@
+/* Theme overrides for @draftline/react's React Flow graph. Colors follow CutReady's light/dark tokens. */
+.history-graph {
+  height: 100%;
+  width: 100%;
+}
+
+.history-graph .react-flow {
+  --xy-background-color: rgb(var(--color-surface-inset));
+  --xy-background-pattern-color: rgb(var(--color-border-subtle));
+  --xy-edge-stroke: rgb(var(--color-text-tertiary));
+  --xy-edge-stroke-selected: rgb(var(--color-accent));
+  --xy-node-background-color: transparent;
+  --xy-node-border: none;
+  --xy-node-boxshadow-hover: none;
+  --xy-node-boxshadow-selected: none;
+  --xy-handle-background-color: rgb(var(--color-border));
+  --xy-handle-border-color: rgb(var(--color-surface));
+  --xy-controls-button-background-color: rgb(var(--color-surface));
+  --xy-controls-button-background-color-hover: rgb(var(--color-surface-alt));
+  --xy-controls-button-color: rgb(var(--color-text));
+  --xy-controls-button-color-hover: rgb(var(--color-text));
+  --xy-controls-button-border-color: rgb(var(--color-border-subtle));
+  --xy-controls-box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
+  background: rgb(var(--color-surface-inset));
+}
+
+.history-graph .react-flow__controls-button svg {
+  fill: currentColor;
+}
+
+.history-graph .react-flow__handle {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.history-graph .react-flow__node {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.history-graph .workspace-graph-node {
+  width: 220px;
+  height: 72px;
+}
+
+.history-graph-card {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  overflow: hidden;
+  padding: 8px 12px;
+  border: 1px solid rgb(var(--color-border));
+  border-radius: 8px;
+  background: rgb(var(--color-surface));
+  color: rgb(var(--color-text));
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.history-graph-card:hover {
+  border-color: rgb(var(--color-accent));
+}
+
+.history-graph-card:focus-visible {
+  outline: 2px solid rgb(var(--color-accent));
+  outline-offset: 2px;
+}
+
+.history-graph-card[data-current] {
+  border-color: rgb(var(--color-accent));
+  box-shadow: inset 3px 0 0 rgb(var(--color-accent));
+}
+
+.history-graph-card[data-merge] {
+  border-style: dashed;
+}
+
+.history-graph-card-name,
+.history-graph-card-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-graph-card-name {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.history-graph-card-meta {
+  font-size: 11px;
+  color: rgb(var(--color-text-secondary));
+}

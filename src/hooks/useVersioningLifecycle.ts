@@ -4,10 +4,10 @@ import { useAppStore } from "../stores/appStore";
 import { useChangeSummaryStore } from "../stores/changeSummaryStore";
 import { useRemoteSync } from "./useRemoteSync";
 
-/** Phase 1: the existing history tab, until the History view replaces it. */
+/** Opens the History document tab. */
 export function openHistoryTab() {
   useChangeSummaryStore.getState().setPopoverOpen(false);
-  useAppStore.getState().openTab({ type: "history", path: "__history__", title: "History Graph" });
+  useAppStore.getState().openTab({ type: "history", path: "__history__", title: "History" });
 }
 
 /** Per-project versioning upkeep: remote checks, stale discard shelves, and a fresh chip on switch. */
