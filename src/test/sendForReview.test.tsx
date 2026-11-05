@@ -21,7 +21,7 @@ describe("Send for review UI", () => {
   });
 
   it("prefills the pull request title and sends the edited title and description", () => {
-    const sendForReview = vi.fn(async () => {});
+    const sendForReview = vi.fn(async () => true);
     useSyncStore.setState({ sendForReviewPrompt: { defaultTitle: "Tighten intro" }, sendForReview });
 
     render(<SendForReviewDialog />);
@@ -36,7 +36,7 @@ describe("Send for review UI", () => {
   });
 
   it("prefills the description with the version comment", () => {
-    const sendForReview = vi.fn(async () => {});
+    const sendForReview = vi.fn(async () => true);
     useSyncStore.setState({ sendForReviewPrompt: { defaultTitle: "Tighten intro", defaultBody: "Cut the second demo." }, sendForReview });
 
     render(<SendForReviewDialog />);
@@ -46,7 +46,7 @@ describe("Send for review UI", () => {
   });
 
   it("cancels without sending", () => {
-    const sendForReview = vi.fn(async () => {});
+    const sendForReview = vi.fn(async () => true);
     useSyncStore.setState({ sendForReviewPrompt: { defaultTitle: "Tighten intro" }, sendForReview });
 
     render(<SendForReviewDialog />);

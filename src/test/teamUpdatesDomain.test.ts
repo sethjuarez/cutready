@@ -1,0 +1,54 @@
+import { describe, expect, it } from "vitest";
+import {
+  incomingAuthors,
+  isTeamUpdatesName,
+  syncCopy,
+  teammates,
+  teamUpdatesLabel,
+  TEAM_UPDATES_NAME,
+} from "../domain/versioning";
+
+describe("team update labels", () => {
+  it("names the version plainly and lists what came in as its comment", () => {
+    expect(teamUpdatesLabel([
+      { name: "#24 lead queue with wing-light hero", comment: "", author: "Dana" },
+      { name: "  tighten\n outro ", comment: "" },
+    ])).toBe("Brought in team updates\n\n- #24 lead queue with wing-light hero (Dana)\n- tighten outro");
+    expect(teamUpdatesLabel([])).toBe(TEAM_UPDATES_NAME);
+  });
+
+  it("caps the list and long names", () => {
+    const many = Array.from({ length: 23 }, (_, i) => ({ name: `save ${i}`, comment: "" }));
+    const lines = teamUpdatesLabel(many).split("\n");
+    expect(lines[lines.length - 1]).toBe("- …and 3 more");
+    expect(lines).toHaveLength(2 + 21);
+    const long = teamUpdatesLabel([{ name: "x".repeat(300), comment: "" }]).split("\n")[2];
+    expect(long.length).toBeLessThanOrEqual(122);
+  });
+
+  it("recognizes generated names, old and new", () => {
+    expect(isTeamUpdatesName("Brought in team updates\n\n- a")).toBe(true);
+    expect(isTeamUpdatesName("Merge updates from main")).toBe(true);
+    expect(isTeamUpdatesName("Merge updates")).toBe(true);
+    expect(isTeamUpdatesName("Merge the intros")).toBe(false);
+  });
+
+  it("names teammates", () => {
+    expect(incomingAuthors([{ name: "a", comment: "", author: "Dana" }, { name: "b", comment: "", author: "Dana" }, { name: "c", comment: "" }])).toEqual(["Dana"]);
+    expect(teammates([])).toBe("a teammate");
+    expect(teammates(["Dana", "Lee"])).toBe("Dana and Lee");
+    expect(teammates(["Dana", "Lee", "Kim"])).toBe("Dana, Lee and 1 other");
+  });
+});
+
+describe("sync copy", () => {
+  it("reads as plain status", () => {
+    expect(syncCopy.savesWaiting(1)).toBe("1 save waiting to send");
+    expect(syncCopy.teamHasUpdates(3)).toBe("Team has 3 new updates");
+    expect(syncCopy.sent(2)).toBe("Sent ✓ (also picked up 2 team updates)");
+    expect(syncCopy.sent(0, true)).toBe("Sent for review ✓");
+    expect(syncCopy.gotTeamUpdates(0)).toBe("Got the team's updates.");
+    expect(syncCopy.conflictTitle(["Dana"], ["cutready/compass.sk"])).toBe("You and Dana both changed compass.sk");
+    expect(syncCopy.conflictTitle([], ["a.sk", "b.md"])).toBe("You and a teammate both changed 2 files");
+  });
+});

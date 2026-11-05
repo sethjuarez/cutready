@@ -34,6 +34,7 @@ import { useToastStore } from "./toastStore";
 import { useAppStore } from "./appStore";
 import { useSyncStore } from "./syncStore";
 import { activeTimelineLabel, askMergeName } from "../services/mergeName";
+import { syncCopy, teamUpdatesLabel } from "../domain/versioning";
 import { mergeVariation, runVariationMerge, variationMergeErrorMessage } from "../services/variationMerge";
 import { isStaleMergeTokenError, MERGE_UPDATES_CHANGED_MESSAGE } from "../services/draftlineErrors";
 import { deleteSetAsideShelf, listSetAsideShelves, restoreSetAsideShelf, setAsideChanges } from "../services/setAsideShelves";
@@ -697,10 +698,9 @@ export const useVersioningStore = create<VersioningStoreState>((set, get) => ({
     const local = draftlineMergeToken?.local === true;
     if (!draftlineMergeToken || (!draftlineMergeRemote && !local)) throw new Error("No Draftline merge in progress");
 
-    // Base merges carry the base branch name as the token source.
-    const base = local ? null : draftlineMergeToken.source ?? null;
-    const source = local ? mergeSource ?? draftlineMergeToken.source ?? "" : base ?? activeTimelineLabel(get().timelines) ?? draftlineMergeRemote ?? "";
-    const message = await askMergeName(source, draftlineMergeIncoming);
+    // Only the user's own "Merge into…" is named by them; team updates name themselves.
+    const source = mergeSource ?? draftlineMergeToken.source ?? "";
+    const message = local ? await askMergeName(source, draftlineMergeIncoming) : teamUpdatesLabel(draftlineMergeIncoming);
     if (!message) return null;
     const dto = resolutions.map((resolution): MergeConflictResolution => ({
       path: resolution.path,
@@ -743,7 +743,7 @@ export const useVersioningStore = create<VersioningStoreState>((set, get) => ({
       draftlineMergeIncoming: [],
     });
     await reloadAfterMerge();
-    const done = local ? `Merged ${source} into ${mergeTarget ?? "this timeline"}.` : base ? `Updates from ${base} brought in.` : "Incoming saves merged.";
+    const done = local ? `Merged ${source} into ${mergeTarget ?? "this timeline"}.` : syncCopy.gotTeamUpdates(draftlineMergeIncoming.length);
     useToastStore.getState().showUpdate(done, "success");
     return commitId;
   },

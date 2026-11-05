@@ -3,7 +3,6 @@
 // are read with getState() inside actions only.
 import { create } from "zustand";
 import {
-  applyDraftlineIncoming,
   adoptDraftlineRemoteBranch,
   fetchDraftlineRemote,
   getDraftlineBaseStatus,
@@ -11,18 +10,16 @@ import {
   listDraftlineIncomingCommits,
   listDraftlineRemoteBranches,
   listDraftlineRemotes,
-  preflightDraftlineIncoming,
-  preflightDraftlineMergeBase,
-  preflightDraftlineMergeIncoming,
-  mergeDraftlineIncomingWithToken,
   publishDraftlineChanges,
   sendForReview as sendDraftlineForReview,
 } from "../services/draftlineVersioning";
-import { baseRenamedBranches, mergeNeedsDeveloperMessage } from "../services/draftlineErrors";
+import { baseRenamedBranches } from "../services/draftlineErrors";
+import { bringInTeamUpdates, type TeamUpdateOutcome } from "../services/teamUpdates";
+import { incomingAuthors, syncCopy } from "../domain/versioning";
+import { firstParentTimelineNodes } from "../utils/timelineNodes";
 import { useToastStore } from "./toastStore";
 import { useAppStore } from "./appStore";
 import { useVersioningStore } from "./versioningStore";
-import { activeTimelineLabel, askMergeName } from "../services/mergeName";
 import {
   SYNC_IN_PROGRESS_MESSAGE,
   buildShareUrl,
@@ -75,17 +72,19 @@ export interface SyncActions {
   /** Fetch from the remote. */
   fetchFromRemote: (options?: { notifyAuthRequired?: boolean }) => Promise<void>;
   /** Push current timeline to the remote (hybrid projects: opens the Send for review prompt). */
-  pushToRemote: () => Promise<void>;
+  /** Resolves true only when the work actually reached the remote. */
+  pushToRemote: () => Promise<boolean>;
   /** Hybrid projects: push the CutReady branch and open/update a pull request. */
-  sendForReview: (title: string, body?: string) => Promise<void>;
+  /** Resolves true only when the pull request was opened or updated. */
+  sendForReview: (title: string, body?: string, pickedUp?: number) => Promise<boolean>;
   /** Dismiss the Send for review prompt without sending. */
   cancelSendForReview: () => void;
-  /** Pull from remote (fast-forward merge). */
-  pullFromRemote: () => Promise<void>;
-  /** Hybrid projects on a non-base branch: merge the latest base (e.g. `main`) in. */
-  getUpdatesFromBase: () => Promise<void>;
-  /** Sync: fetch then push (or pull if behind). */
-  syncWithRemote: () => Promise<void>;
+  /** Bring in what the team sent, silently unless files conflict. */
+  pullFromRemote: (options?: { quiet?: boolean }) => Promise<TeamUpdateOutcome | null>;
+  /** Hybrid projects on their own copy: bring in the shared project's latest updates. */
+  getUpdatesFromBase: () => Promise<TeamUpdateOutcome | null>;
+  /** Send: bring in team updates first if any, then send the saves (hybrid: for review). */
+  syncWithRemote: (version?: { name: string; comment: string }) => Promise<void>;
   /** Share local changes safely with collaborators. */
   shareChanges: () => Promise<void>;
   /** Refresh incoming remote snapshot preview. */
@@ -138,6 +137,11 @@ let syncStatusInFlight: Promise<void> | null = null;
 let syncStatusRerunQueued = false;
 
 const app = () => useAppStore.getState();
+/** True while the project open at call time is still open. Draftline calls follow the open project. */
+const sameWorkspace = () => {
+  const generation = currentWorkspaceGeneration();
+  return () => generation === currentWorkspaceGeneration();
+};
 const versioning = () => useVersioningStore.getState();
 
 export const useSyncStore = create<SyncStoreState>((set, get) => ({
@@ -180,33 +184,39 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
   fetchFromRemote: async (options = {}) => {
     const { currentRemote } = get();
     if (!currentRemote) return;
+    const isCurrent = sameWorkspace();
     if (!await ensureGitHubRemoteCredential(currentRemote, options.notifyAuthRequired ?? true)) return;
+    if (!isCurrent()) return;
     set({ isSyncing: true, syncError: null });
     try {
       await fetchDraftlineRemote(currentRemote.name);
+      if (!isCurrent()) return;
       await get().refreshSyncStatus();
       await get().refreshIncomingCommits();
       await versioning().loadGraphData();
       await versioning().loadTimelines();
       await versioning().loadVersions();
     } catch (err) {
-      set({ syncError: remoteSyncErrorMessage(err) });
+      if (isCurrent()) set({ syncError: remoteSyncErrorMessage(err) });
     } finally {
-      set({ isSyncing: false });
+      // A project switch already reset this store; leave the new project alone.
+      if (isCurrent()) set({ isSyncing: false });
     }
   },
 
   pushToRemote: async () => {
     const { currentRemote } = get();
     const { timelines } = versioning();
-    if (!currentRemote) return;
-    if (!await ensureGitHubRemoteCredential(currentRemote, true)) return;
+    if (!currentRemote) return false;
+    const isCurrent = sameWorkspace();
+    if (!await ensureGitHubRemoteCredential(currentRemote, true)) return false;
+    if (!isCurrent()) return false;
     const active = timelines.find((t) => t.is_active);
-    if (!active) return;
+    if (!active) return false;
     // Another sync operation may have started while credentials were checked.
     if (get().isSyncing) {
       useToastStore.getState().show(SYNC_IN_PROGRESS_MESSAGE, 5000, "info");
-      return;
+      return false;
     }
     const project = app().currentProject;
     if (project?.hybrid) {
@@ -218,17 +228,21 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
           defaultBody: versioning().versions[0]?.comment ?? "",
         },
       });
-      return;
+      return false;
     }
     set({ isSyncing: true, syncError: null, baseRename: null });
+    let sent = false;
     try {
       // Large-file check before push
       const largeFileError = largeFilesSyncError(await versioning().checkLargeFiles());
       if (largeFileError) {
         set({ syncError: largeFileError, isSyncing: false });
-        return;
+        return false;
       }
+      if (!isCurrent()) return false;
       await publishDraftlineChanges(currentRemote.name);
+      sent = true;
+      if (!isCurrent()) return true;
       await get().refreshSyncStatus();
       await versioning().checkDirty();
       await versioning().refreshChangedFiles();
@@ -236,55 +250,55 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
       await versioning().loadTimelines();
       await versioning().loadVersions();
     } catch (err) {
-      set({ syncError: remoteSyncErrorMessage(err), baseRename: baseRenamedBranches(err) });
+      // A failed refresh after a good push still counts as sent.
+      if (!sent && isCurrent()) set({ syncError: remoteSyncErrorMessage(err), baseRename: baseRenamedBranches(err) });
     } finally {
-      set({ isSyncing: false });
+      if (isCurrent()) set({ isSyncing: false });
     }
+    return sent;
   },
 
-  sendForReview: async (title, body) => {
+  sendForReview: async (title, body, pickedUp = 0) => {
     const { currentRemote } = get();
     set({ sendForReviewPrompt: null });
-    if (!currentRemote || !app().currentProject?.hybrid) return;
+    if (!currentRemote || !app().currentProject?.hybrid) return false;
     const trimmedTitle = title.trim();
-    if (!trimmedTitle) return;
-    if (!await ensureGitHubRemoteCredential(currentRemote, true)) return;
+    if (!trimmedTitle) return false;
+    const isCurrent = sameWorkspace();
+    if (!await ensureGitHubRemoteCredential(currentRemote, true)) return false;
+    if (!isCurrent()) return false;
     if (get().isSyncing) {
       useToastStore.getState().show(SYNC_IN_PROGRESS_MESSAGE, 5000, "info");
-      return;
+      return false;
     }
     set({ isSyncing: true, syncError: null });
     let sendAttempted = false;
+    let sent = false;
     let sendError: string | null = null;
     try {
       const largeFileError = largeFilesSyncError(await versioning().checkLargeFiles());
       if (largeFileError) {
         set({ syncError: largeFileError, isSyncing: false });
-        return;
+        return false;
       }
+      if (!isCurrent()) return false;
       sendAttempted = true;
       const result = await sendDraftlineForReview({
         remote: currentRemote.name,
         title: trimmedTitle,
         body,
       });
-      const { number, url } = result.pull_request;
-      useToastStore.getState().show(
-        result.created_pull_request
-          ? `Pull request #${number} opened for review.`
-          : `Pull request #${number} updated.`,
-        10000,
-        "success",
-        { label: "Open", url },
-      );
-      set({ shareUrl: url });
+      const { url } = result.pull_request;
+      sent = true;
+      useToastStore.getState().show(syncCopy.sent(pickedUp, true), 10000, "success", { label: "Open", url });
+      if (isCurrent()) set({ shareUrl: url });
     } catch (err) {
       sendError = remoteSyncErrorMessage(err);
-      set({ syncError: sendError });
+      if (isCurrent()) set({ syncError: sendError });
     } finally {
       // Send can switch branches and push before the pull request step fails,
       // so refresh even on error to show the real current variation.
-      if (sendAttempted) {
+      if (sendAttempted && isCurrent()) {
         try {
           await get().refreshSyncStatus();
           await versioning().checkDirty();
@@ -296,28 +310,55 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
           // Refresh failures must not mask the send result.
         }
         // A successful status refresh clears syncError; keep the send failure visible.
-        if (sendError) set({ syncError: sendError });
+        if (sendError && isCurrent()) set({ syncError: sendError });
       }
-      set({ isSyncing: false });
+      if (isCurrent()) set({ isSyncing: false });
     }
+    return sent;
   },
 
   cancelSendForReview: () => set({ sendForReviewPrompt: null }),
 
-  syncWithRemote: async () => {
-    // Fetch first to get latest state
+  syncWithRemote: async (version) => {
+    const { currentRemote } = get();
+    if (!currentRemote) return;
+    if (get().isSyncing) {
+      useToastStore.getState().show(SYNC_IN_PROGRESS_MESSAGE, 5000, "info");
+      return;
+    }
+    const generation = currentWorkspaceGeneration();
+    const stale = () => generation !== currentWorkspaceGeneration();
     await get().fetchFromRemote();
-    const updated = get().syncStatus;
-    if (!updated) return;
-    // If behind, pull first
-    if (updated.behind > 0) {
-      await get().pullFromRemote();
+    if (stale() || get().syncError) return;
+    // Whatever the team sent comes in first, without a prompt; only a
+    // conflict stops the send.
+    let pickedUp = 0;
+    if ((get().syncStatus?.behind ?? 0) > 0) {
+      const outcome = await get().pullFromRemote({ quiet: true });
+      if (stale() || outcome?.kind !== "brought-in") return;
+      pickedUp = outcome.count;
     }
-    // If ahead (and not diverged), push
-    const afterPull = get().syncStatus;
-    if (afterPull && afterPull.ahead > 0 && afterPull.behind === 0) {
-      await get().pushToRemote();
+    const status = get().syncStatus;
+    if (!status) {
+      // Never guess: without a fresh status we can't tell what still needs sending.
+      set({ syncError: syncCopy.couldNotSend });
+      return;
     }
+    if (status.behind > 0) {
+      set({ syncError: syncCopy.moreTeamUpdates });
+      return;
+    }
+    if (status.ahead === 0) {
+      if (pickedUp > 0) useToastStore.getState().showUpdate(syncCopy.gotTeamUpdates(pickedUp), "success");
+      return;
+    }
+    if (app().currentProject?.hybrid) {
+      const latest = version ?? latestSave();
+      await get().sendForReview(latest.name, latest.comment || undefined, pickedUp);
+      return;
+    }
+    const sent = await get().pushToRemote();
+    if (sent && !stale()) useToastStore.getState().showUpdate(syncCopy.sent(pickedUp), "success");
   },
 
   shareChanges: async () => {
@@ -326,9 +367,9 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
     if (!currentRemote) return;
     const active = timelines.find((t) => t.is_active);
     if (!active) return;
-    await get().pushToRemote();
+    const sent = await get().pushToRemote();
     // Hybrid projects share via the Send for review prompt (pull request), not a branch link.
-    if (app().currentProject?.hybrid) return;
+    if (!sent || app().currentProject?.hybrid) return;
     const url = buildShareUrl(currentRemote.url, active.name);
     set({ shareUrl: url });
     if (url) {
@@ -341,144 +382,66 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
     }
   },
 
-  pullFromRemote: async () => {
+  pullFromRemote: async (options) => {
     const { currentRemote } = get();
-    if (!currentRemote) return;
-    if (!await ensureGitHubRemoteCredential(currentRemote, true)) return;
-    set({ isSyncing: true, syncError: null });
-    try {
-      const preflight = await preflightDraftlineIncoming(currentRemote.name);
-      if (!preflight.canProceed) {
-        const state = preflight.syncStatus.state;
-        if (state === "needsMerge" && preflight.dirtyFiles.length === 0) {
-          const mergeReport = await preflightDraftlineMergeIncoming(currentRemote.name);
-          if (mergeReport.canMergeCleanly && mergeReport.token) {
-            const message = await askMergeName(activeTimelineLabel(versioning().timelines) ?? currentRemote.name, mergeReport.incoming);
-            if (!message) return;
-            await mergeDraftlineIncomingWithToken(mergeReport.token, message, currentRemote.name);
-            await app().loadSketches();
-            await app().loadStoryboards();
-            await app().loadNotes();
-            await get().refreshSyncStatus();
-            await get().refreshIncomingCommits();
-            await versioning().loadVersions();
-            await versioning().loadGraphData();
-            await versioning().loadTimelines();
-            await versioning().checkDirty();
-            useToastStore.getState().showUpdate("Incoming saves merged.", "success");
-            return;
-          }
-          if (mergeReport.conflicts.length > 0 && mergeReport.token) {
-            // Merge state belongs to versioningStore; both updates land synchronously.
-            useVersioningStore.setState({
-              isMerging: true,
-              mergeSource: currentRemote.name,
-              mergeTarget: "incoming",
-              mergeConflicts: mergeReport.conflicts,
-              draftlineMergeToken: mergeReport.token,
-              draftlineMergeRemote: currentRemote.name,
-              draftlineMergeIncoming: mergeReport.incoming,
-            });
-            set({
-              syncError: null,
-              syncStatus: { ahead: mergeReport.syncStatus.ahead, behind: mergeReport.syncStatus.behind },
-            });
-            useToastStore.getState().showUpdate("Incoming saves need conflict resolution.", "info");
-            return;
-          }
-          set({
-            syncError: "Incoming saves cannot be merged safely right now.",
-            syncStatus: { ahead: mergeReport.syncStatus.ahead, behind: mergeReport.syncStatus.behind },
-          });
-          return;
-        }
-        const reason = preflight.dirtyFiles.length > 0
-          ? "Save or discard local changes before applying incoming saves."
-          : "Incoming saves cannot be applied safely right now.";
-        set({ syncError: reason, syncStatus: { ahead: preflight.syncStatus.ahead, behind: preflight.syncStatus.behind } });
-        return;
-      }
-
-      await applyDraftlineIncoming(currentRemote.name);
-      await app().loadSketches();
-      await app().loadStoryboards();
-      await app().loadNotes();
-      await app().loadChatArtifacts();
-      await get().refreshSyncStatus();
-      await get().refreshIncomingCommits();
-      await versioning().loadVersions();
-      await versioning().loadGraphData();
-      await versioning().loadTimelines();
-      await versioning().checkDirty();
-      useToastStore.getState().showUpdate("Incoming saves applied.", "success");
-    } catch (err) {
-      set({ syncError: mergeSyncErrorMessage(err) });
-    } finally {
-      set({ isSyncing: false });
+    if (!currentRemote) return null;
+    if (!await ensureGitHubRemoteCredential(currentRemote, true)) return null;
+    if (get().isSyncing) {
+      useToastStore.getState().show(SYNC_IN_PROGRESS_MESSAGE, 5000, "info");
+      return null;
     }
+    set({ isSyncing: true, syncError: null });
+    const generation = currentWorkspaceGeneration();
+    const isCurrent = () => generation === currentWorkspaceGeneration();
+    let outcome: TeamUpdateOutcome | null = null;
+    let updateError: string | null = null;
+    try {
+      outcome = await bringInTeamUpdates(currentRemote.name, "incoming", isCurrent);
+      updateError = announceTeamUpdates(outcome, options?.quiet === true);
+    } catch (err) {
+      updateError = mergeSyncErrorMessage(err);
+    } finally {
+      // A project switch already reset this store; leave the new project alone.
+      if (isCurrent()) {
+        await refreshAfterTeamUpdates(outcome);
+        // A successful status refresh clears syncError; keep the failure visible.
+        if (updateError && isCurrent()) set({ syncError: updateError });
+        if (isCurrent()) set({ isSyncing: false });
+      }
+    }
+    return isCurrent() ? outcome : { kind: "cancelled" };
   },
 
   getUpdatesFromBase: async () => {
     const { currentRemote } = get();
-    if (!currentRemote || !app().currentProject?.hybrid) return;
-    if (!await ensureGitHubRemoteCredential(currentRemote, true)) return;
+    if (!currentRemote || !app().currentProject?.hybrid) return null;
+    if (!await ensureGitHubRemoteCredential(currentRemote, true)) return null;
     if (get().isSyncing) {
       useToastStore.getState().show(SYNC_IN_PROGRESS_MESSAGE, 5000, "info");
-      return;
+      return null;
     }
-    const base = get().baseStatus?.base ?? "main";
     set({ isSyncing: true, syncError: null });
+    const generation = currentWorkspaceGeneration();
+    const isCurrent = () => generation === currentWorkspaceGeneration();
+    let outcome: TeamUpdateOutcome | null = null;
     let updateError: string | null = null;
     try {
-      // Fetches first, so the merge below sees the latest base.
-      const report = await preflightDraftlineMergeBase(currentRemote.name);
-      if (report.dirtyFiles.length > 0) {
-        updateError = `Save or discard local changes before getting updates from ${base}.`;
-      } else if (report.canMergeCleanly && report.token) {
-        const message = await askMergeName(base, report.incoming);
-        if (message) {
-          await mergeDraftlineIncomingWithToken(report.token, message, currentRemote.name);
-          useToastStore.getState().showUpdate(`Updates from ${base} brought in.`, "success");
-        }
-      } else if (report.conflicts.length > 0 && report.token) {
-        useVersioningStore.setState({
-          isMerging: true,
-          mergeSource: base,
-          mergeTarget: "incoming",
-          mergeConflicts: report.conflicts,
-          draftlineMergeToken: report.token,
-          draftlineMergeRemote: currentRemote.name,
-          draftlineMergeIncoming: report.incoming,
-        });
-        useToastStore.getState().showUpdate(`Updates from ${base} need conflict resolution.`, "info");
-      } else if (report.syncStatus.behind === 0) {
-        useToastStore.getState().show(`Already up to date with ${base}.`, 4000, "info");
-      } else {
-        updateError = `Updates from ${base} can't be brought in safely right now.`;
-      }
+      // Fetches first, so the update sees the latest shared project.
+      outcome = await bringInTeamUpdates(currentRemote.name, "base", isCurrent);
+      updateError = announceTeamUpdates(outcome, false);
     } catch (err) {
       updateError = isMergeNeedsDeveloperError(err)
-        ? mergeNeedsDeveloperMessage(base)
+        ? syncCopy.sharedUpdatesNeedDeveloper
         : mergeSyncErrorMessage(err);
     } finally {
-      // Refresh even on failure: the fetch may have moved the base.
-      try {
-        await app().loadSketches();
-        await app().loadStoryboards();
-        await app().loadNotes();
-        await get().refreshSyncStatus();
-        await get().refreshIncomingCommits();
-        await versioning().loadVersions();
-        await versioning().loadGraphData();
-        await versioning().loadTimelines();
-        await versioning().checkDirty();
-      } catch {
-        // Refresh failures must not mask the update result.
+      if (isCurrent()) {
+        // Refresh even on failure: the fetch may have moved the shared project.
+        await refreshAfterTeamUpdates({ kind: "brought-in", count: 0 });
+        if (updateError && isCurrent()) set({ syncError: updateError });
+        if (isCurrent()) set({ isSyncing: false });
       }
-      // A successful status refresh clears syncError; keep the failure visible.
-      if (updateError) set({ syncError: updateError });
-      set({ isSyncing: false });
     }
+    return isCurrent() ? outcome : { kind: "cancelled" };
   },
 
   loadRemoteBranches: async () => {
@@ -624,3 +587,58 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
     }
   },
 }));
+
+/** The newest save on this timeline: Send reuses its name and comment. */
+export function latestSave(): { name: string; comment: string } {
+  const [head] = firstParentTimelineNodes(versioning().graphNodes);
+  return { name: head?.message.split(/\r?\n/, 1)[0] || "CutReady changes", comment: head?.comment ?? "" };
+}
+
+/** Toasts the outcome; returns the message to keep on screen when nothing came in. */
+function announceTeamUpdates(outcome: TeamUpdateOutcome, quiet: boolean): string | null {
+  const toast = useToastStore.getState();
+  switch (outcome.kind) {
+    case "none":
+      if (!quiet) toast.show(syncCopy.alreadyUpToDate, 4000, "info");
+      return null;
+    case "brought-in":
+      if (!quiet) toast.showUpdate(syncCopy.gotTeamUpdates(outcome.count), "success");
+      return null;
+    case "conflict":
+      toast.showUpdate(syncCopy.conflict(incomingAuthors(versioning().draftlineMergeIncoming)), "info");
+      return null;
+    case "blocked":
+      return outcome.message;
+    case "cancelled":
+      return null;
+  }
+}
+
+/** Reload what team updates can change; failures must not mask the update result. */
+async function refreshAfterTeamUpdates(outcome: TeamUpdateOutcome | null): Promise<void> {
+  const sync = useSyncStore.getState();
+  // Status first and on its own: Send decides what to do next from it.
+  const steps: Array<() => Promise<unknown>> = [
+    () => sync.refreshSyncStatus(),
+    () => sync.refreshIncomingCommits(),
+    () => versioning().loadVersions(),
+    () => versioning().loadGraphData(),
+    () => versioning().loadTimelines(),
+    () => versioning().checkDirty(),
+  ];
+  if (outcome?.kind === "brought-in") {
+    steps.push(
+      () => app().loadSketches(),
+      () => app().loadStoryboards(),
+      () => app().loadNotes(),
+      () => app().loadChatArtifacts(),
+    );
+  }
+  for (const step of steps) {
+    try {
+      await step();
+    } catch {
+      // One failed reload must not hide the update result or skip the rest.
+    }
+  }
+}

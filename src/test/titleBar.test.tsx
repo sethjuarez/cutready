@@ -103,10 +103,10 @@ describe("SendSection", () => {
     expect(screen.getByTestId("titlebar-send")).toHaveTextContent("Up to date");
   });
 
-  it("pushes saved versions through the operation boundary", async () => {
+  it("sends saved versions through the operation boundary", async () => {
     runWith(emptySummary);
-    const pushToRemote = vi.fn(() => Promise.resolve());
-    act(() => useSyncStore.setState({ currentRemote: remote, syncStatus: { ahead: 2, behind: 0 }, pushToRemote }));
+    const pushToRemote = vi.fn(() => Promise.resolve(true));
+    act(() => useSyncStore.setState({ currentRemote: remote, syncStatus: { ahead: 2, behind: 0 }, pushToRemote, fetchFromRemote: vi.fn(async () => undefined) }));
     render(<SendSection />);
     const send = screen.getByTestId("titlebar-send");
     expect(send).toHaveTextContent("Send 2 versions");
@@ -117,7 +117,7 @@ describe("SendSection", () => {
 
   it("syncs instead of pushing when the branch has diverged", async () => {
     runWith(emptySummary);
-    const pushToRemote = vi.fn(() => Promise.resolve());
+    const pushToRemote = vi.fn(() => Promise.resolve(true));
     const syncWithRemote = vi.fn(() => Promise.resolve());
     act(() => useSyncStore.setState({ currentRemote: remote, syncStatus: { ahead: 1, behind: 1 }, pushToRemote, syncWithRemote }));
     render(<SendSection />);
@@ -139,18 +139,18 @@ describe("SendSection", () => {
 
   it("sends hybrid projects for review with the latest version name", async () => {
     runWith(emptySummary);
-    const sendForReview = vi.fn(() => Promise.resolve());
+    const sendForReview = vi.fn(() => Promise.resolve(true));
     act(() => {
       useAppStore.setState({ currentProject: { hybrid: true } as never });
       useVersioningStore.setState({
         graphNodes: [{ id: "abc", message: "Tighten intro", timestamp: "", timeline: "main", parents: [], lane: 0, is_head: true }],
       });
-      useSyncStore.setState({ currentRemote: remote, syncStatus: { ahead: 1, behind: 0 }, sendForReview });
+      useSyncStore.setState({ currentRemote: remote, syncStatus: { ahead: 1, behind: 0 }, sendForReview, fetchFromRemote: vi.fn(async () => undefined) });
     });
     render(<SendSection />);
     expect(screen.getByTestId("titlebar-send")).toHaveTextContent("Send for review 1 version");
     await act(async () => fireEvent.click(screen.getByTestId("titlebar-send")));
-    expect(sendForReview).toHaveBeenCalledWith("Tighten intro", undefined);
+    expect(sendForReview).toHaveBeenCalledWith("Tighten intro", undefined, 0);
   });
 });
 describe("TimelineMenu", () => {

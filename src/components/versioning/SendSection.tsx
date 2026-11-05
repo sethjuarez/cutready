@@ -5,8 +5,6 @@ import { isSaveBlocked, runVersionOperation } from "../../services/versionOperat
 import { useAppStore } from "../../stores/appStore";
 import { useChangeSummaryStore } from "../../stores/changeSummaryStore";
 import { useSyncStore } from "../../stores/syncStore";
-import { useVersioningStore } from "../../stores/versioningStore";
-import { firstParentTimelineNodes } from "../../utils/timelineNodes";
 import { VersionForm } from "./VersionForm";
 
 /** Send, gated: "Up to date" when there's nothing new, and a version first when there are unsaved changes. */
@@ -14,8 +12,6 @@ export function SendSection({ showComment = true }: { showComment?: boolean }) {
   const currentRemote = useSyncStore((s) => s.currentRemote);
   const syncStatus = useSyncStore((s) => s.syncStatus);
   const isSyncing = useSyncStore((s) => s.isSyncing);
-  const pushToRemote = useSyncStore((s) => s.pushToRemote);
-  const sendForReview = useSyncStore((s) => s.sendForReview);
   const syncWithRemote = useSyncStore((s) => s.syncWithRemote);
   const changedCount = useChangeSummaryStore((s) => s.summary?.documents.length ?? 0);
   const isHybrid = useAppStore((s) => s.currentProject?.hybrid === true);
@@ -27,29 +23,22 @@ export function SendSection({ showComment = true }: { showComment?: boolean }) {
   const sendLabel = isHybrid ? "Send for review" : "Send";
   const label = sendGateLabel(gate, sendLabel, syncStatus?.behind ?? 0);
 
-  // Send reuses the version's name and comment; hybrid projects use them for the pull request.
-  const send = async (version?: { name: string; comment: string }) => {
-    if (isHybrid) {
-      const latest = version ?? latestVersion();
-      await sendForReview(latest.name, latest.comment || undefined);
-    } else {
-      await pushToRemote();
-    }
-  };
+  // One flow for every send: team updates come in silently first, then the
+  // saves go out. Hybrid projects reuse the version's name and comment for review.
+  const send = (version?: { name: string; comment: string }) => syncWithRemote(version);
 
   const onClick = () => {
     if (gate.kind === "save-first") {
       setConfirmingSave(true);
       return;
     }
-    const action = gate.kind === "sync" ? () => syncWithRemote() : () => send();
     void runVersionOperation("Send", async (summary) => {
       // Edits landed since the popover opened: ask for a version first.
       if (summary.documents.length > 0) {
         setConfirmingSave(true);
         return;
       }
-      await action();
+      await send();
     }).catch((err) => {
       if (!isSaveBlocked(err)) console.error("Send failed:", err);
     });
@@ -84,9 +73,4 @@ export function SendSection({ showComment = true }: { showComment?: boolean }) {
       )}
     </div>
   );
-}
-
-function latestVersion(): { name: string; comment: string } {
-  const [head] = firstParentTimelineNodes(useVersioningStore.getState().graphNodes);
-  return { name: head?.message.split(/\r?\n/, 1)[0] || "CutReady changes", comment: head?.comment ?? "" };
 }

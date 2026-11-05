@@ -28,8 +28,8 @@ export function startPreAction(request: PreActionRequest): void {
 }
 
 /** Get updates (incoming saves or the base timeline), asking first when work is unsaved. */
-export function startGetUpdates(run: () => Promise<void>): void {
-  startPreAction({ operation: "Get updates", target: "getting updates", run });
+export function startGetUpdates(run: () => Promise<unknown>): void {
+  startPreAction({ operation: "Get updates", target: "getting updates", run: async () => { await run(); } });
 }
 
 export type SetAsideResult = { shelved: false } | { shelved: true; followUp?: () => Promise<void> };
