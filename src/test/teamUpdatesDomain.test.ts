@@ -6,7 +6,8 @@ import {
   syncCopy,
   teammates,
   teamUpdatesLabel,
-  TEAM_UPDATES_NAME,
+  teamUpdatesNameKind,
+  usesConventionalNames,
 } from "../domain/versioning";
 
 describe("team update labels", () => {
@@ -14,8 +15,13 @@ describe("team update labels", () => {
     expect(teamUpdatesLabel([
       { name: "#24 lead queue with wing-light hero", comment: "", author: "Dana" },
       { name: "  tighten\n outro ", comment: "" },
-    ])).toBe("Brought in team updates\n\n- #24 lead queue with wing-light hero (Dana)\n- tighten outro");
-    expect(teamUpdatesLabel([])).toBe(TEAM_UPDATES_NAME);
+    ])).toBe("Bring in team updates\n\n- #24 lead queue with wing-light hero (Dana)\n- tighten outro");
+    expect(teamUpdatesLabel([])).toBe("Bring in team updates");
+    expect(teamUpdatesLabel([{ name: "#24 a", comment: "" }, { name: "b #25 #24", comment: "" }], true))
+      .toBe("chore(sync): bring in team updates (#24, #25)\n\n- #24 a\n- b #25 #24");
+    expect(teamUpdatesLabel(["#1", "#2", "#3", "#4"].map((name) => ({ name, comment: "" })), true).split("\n")[0])
+      .toBe("chore(sync): bring in team updates (#1, #2, #3…)");
+    expect(teamUpdatesLabel([{ name: "tweak", comment: "" }], true).split("\n")[0]).toBe("chore(sync): bring in team updates");
   });
 
   it("caps the list and long names", () => {
@@ -30,6 +36,9 @@ describe("team update labels", () => {
   it("recognizes generated names, old and new", () => {
     expect(isTeamUpdatesName("Brought in team updates\n\n- a")).toBe(true);
     expect(isTeamUpdatesName("Merge updates from main")).toBe(true);
+    expect(isTeamUpdatesName("Bring in team updates")).toBe(true);
+    expect(isTeamUpdatesName("chore(sync): bring in team updates (#24, #25…)")).toBe(true);
+    expect(teamUpdatesNameKind("chore(sync): bring in team updates (#24)")).toBe("current");
     expect(isTeamUpdatesName("Merge updates")).toBe(true);
     expect(isTeamUpdatesName("Merge the intros")).toBe(false);
   });
@@ -51,6 +60,15 @@ describe("sync copy", () => {
     expect(syncCopy.gotTeamUpdates(0)).toBe("Got the team's updates.");
     expect(syncCopy.conflictTitle(["Dana"], ["cutready/compass.sk"])).toBe("You and Dana both changed compass.sk");
     expect(syncCopy.conflictTitle([], ["a.sk", "b.md"])).toBe("You and a teammate both changed 2 files");
+  });
+});
+
+describe("usesConventionalNames", () => {
+  it("needs most of at least three typed names to be conventional", () => {
+    expect(usesConventionalNames(["feat: a", "fix(ui): b", "intro"])).toBe(true);
+    expect(usesConventionalNames(["feat: a", "intro", "outro"])).toBe(false);
+    expect(usesConventionalNames(["feat: a", "fix: b"])).toBe(false);
+    expect(usesConventionalNames(["feat: a", "fix: b", "Bring in team updates", "Merge updates"])).toBe(false);
   });
 });
 

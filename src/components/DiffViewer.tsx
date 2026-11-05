@@ -5,6 +5,7 @@ import {
   previewDraftlineWorkspaceFile,
 } from "../services/draftlineVersioning";
 import { Columns2, Rows2, LayoutList } from "lucide-react";
+import { parseSnapshotDiffTarget, snapshotDiffTabPath } from "../domain/versioning/snapshotDiffTab";
 
 interface FileDiffContent {
   path: string;
@@ -13,11 +14,6 @@ interface FileDiffContent {
   headPresent: boolean;
   workingPresent: boolean;
   isBinary?: boolean;
-}
-
-interface SnapshotDiffTarget {
-  snapshotId: string;
-  filePath: string;
 }
 
 interface DiffLine {
@@ -110,21 +106,7 @@ function groupIntoHunks(lines: DiffLine[], contextSize = 3): DiffLine[][] {
   return hunks;
 }
 
-export function snapshotDiffTabPath(snapshotId: string, filePath: string): string {
-  return `cutready://snapshot-diff?version=${encodeURIComponent(snapshotId)}&path=${encodeURIComponent(filePath)}`;
-}
-
-function parseSnapshotDiffTarget(path: string): SnapshotDiffTarget | null {
-  if (!path.startsWith("cutready://snapshot-diff?")) return null;
-  try {
-    const url = new URL(path);
-    const snapshotId = url.searchParams.get("version");
-    const filePath = url.searchParams.get("path");
-    return snapshotId && filePath ? { snapshotId, filePath } : null;
-  } catch {
-    return null;
-  }
-}
+export { snapshotDiffTabPath };
 
 export function DiffViewer({ filePath }: { filePath: string }) {
   const snapshotTarget = parseSnapshotDiffTarget(filePath);

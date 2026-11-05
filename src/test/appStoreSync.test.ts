@@ -725,7 +725,7 @@ describe("appStore remote sync status", () => {
       expect(outcome).toEqual({ kind: "brought-in", count: 2 });
       expect(useMergeNameStore.getState().pending).toBeNull();
       expect(mockPreflightDraftlineMergeBase).toHaveBeenCalledWith("origin");
-      expect(mockMergeWithToken).toHaveBeenCalledWith(cleanReport.token, "Brought in team updates", "origin");
+      expect(mockMergeWithToken).toHaveBeenCalledWith(cleanReport.token, "Bring in team updates", "origin");
       expect(useToastStore.getState().toasts).toEqual([
         expect.objectContaining({ message: "Got 2 team updates.", type: "success" }),
       ]);

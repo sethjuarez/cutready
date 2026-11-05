@@ -1,7 +1,13 @@
 import type { IncomingVersion } from "./mergeSuggest";
 
-/** The name every automatic "bring in what the team sent" version gets. */
+/** How history shows a version that brought in what the team sent. */
 export const TEAM_UPDATES_NAME = "Brought in team updates";
+/** The label written when team updates can't be replayed and need their own version. */
+export const TEAM_UPDATES_LABEL = "Bring in team updates";
+
+const CONVENTIONAL = /^[a-z]+(?:\([^)]*\))?!?: \S/i;
+const MAX_REFS = 3;
+const MAX_SAMPLED = 20;
 
 const MAX_LISTED = 20;
 const MAX_LINE_CHARS = 120;
@@ -19,28 +25,55 @@ export function teamUpdateLine(version: IncomingVersion): string {
 }
 
 /**
- * The version label for an automatic team-update merge: the plain name, then
- * the incoming saves as the comment so history can show what came in.
+ * Whether the repository's people write conventional commit names
+ * ("feat(ui): …"): most of the recent names they typed follow the form.
  */
-export function teamUpdatesLabel(incoming: readonly IncomingVersion[]): string {
+export function usesConventionalNames(names: readonly string[]): boolean {
+  const typed = names
+    .map((name) => name.split(/\r?\n/, 1)[0].trim())
+    .filter((name) => name && !isTeamUpdatesName(name))
+    .slice(0, MAX_SAMPLED);
+  if (typed.length < 3) return false;
+  return typed.filter((name) => CONVENTIONAL.test(name)).length * 2 > typed.length;
+}
+
+/** Pull request numbers the incoming saves mention, in order: ["#24", "#26"]. */
+function incomingRefs(incoming: readonly IncomingVersion[]): string[] {
+  return [...new Set(incoming.flatMap((version) => version.name.match(/#\d+/g) ?? []))];
+}
+
+/**
+ * The version label for team updates that need their own version: a plain
+ * name (conventional when the repository uses that form), then the incoming
+ * saves as the comment so history can show what came in.
+ */
+export function teamUpdatesLabel(incoming: readonly IncomingVersion[], conventional = false): string {
+  let name = TEAM_UPDATES_LABEL;
+  if (conventional) {
+    const refs = incomingRefs(incoming);
+    const shown = refs.slice(0, MAX_REFS).join(", ");
+    const suffix = refs.length > MAX_REFS ? ` (${shown}…)` : shown ? ` (${shown})` : "";
+    name = `chore(sync): bring in team updates${suffix}`;
+  }
   const listed = incoming.slice(0, MAX_LISTED).map((version) => `- ${teamUpdateLine(version)}`);
   const more = incoming.length - listed.length;
   if (more > 0) listed.push(`- …and ${more} more`);
-  return listed.length > 0 ? `${TEAM_UPDATES_NAME}\n\n${listed.join("\n")}` : TEAM_UPDATES_NAME;
+  return listed.length > 0 ? `${name}\n\n${listed.join("\n")}` : name;
 }
 
 // A repository's commit template may put a short prefix ("[CutReady] ") before the name.
-const GENERATED_NAME = /^(?:.{0,40}?[\s\]:)>-])?\s*(Brought in team updates|Merge updates(?: from \S+)?)$/;
+const GENERATED_NAME =
+  /^(?:.{0,40}?[\s\]:)>-])?\s*((?:Brought|Bring) in team updates(?: \([^)]*\))?|Merge updates(?: from \S+)?)$/i;
 
 /**
  * Which kind of generated name a version has, if any: the current
- * "Brought in team updates" (whose comment lists what came in) or an older
+ * "Brought in" / "Bring in team updates" (whose comment lists what came in) or an older
  * prefilled "Merge updates from …" (whose comment the person may have typed).
  */
 export function teamUpdatesNameKind(name: string): "current" | "legacy" | null {
   const match = GENERATED_NAME.exec(name.split(/\r?\n/, 1)[0].trim());
   if (!match) return null;
-  return match[1] === TEAM_UPDATES_NAME ? "current" : "legacy";
+  return /^merge/i.test(match[1]) ? "legacy" : "current";
 }
 
 /** Whether a version name was generated for bringing in other people's work rather than typed by someone. */

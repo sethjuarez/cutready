@@ -6,9 +6,14 @@ import {
   preflightDraftlineIncoming,
   preflightDraftlineMergeBase,
   preflightDraftlineMergeIncoming,
+  preflightDraftlineRebaseIncoming,
+  rebaseDraftlineIncoming,
   type DraftlineMergeIncomingReport,
 } from "./draftlineVersioning";
-import { teamUpdatesLabel } from "../domain/versioning/teamUpdates";
+import { teamUpdatesLabel, usesConventionalNames } from "../domain/versioning/teamUpdates";
+import { rebasedIds } from "../domain/versioning/rebaseRemap";
+import { draftlineErrorCode } from "./draftlineErrors";
+import { applyRebasedIds } from "./rebaseRemap";
 import { useVersioningStore } from "../stores/versioningStore";
 import type { SyncStatus } from "../types/sketch";
 
@@ -58,8 +63,47 @@ export async function bringInTeamUpdates(
     return { kind: "brought-in", count: status.behind };
   }
   if (preflight.syncStatus.state !== "needsMerge") return { kind: "blocked", message: UPDATES_UNSAFE_MESSAGE, status };
+  const replayed = await replayUnsentSaves(remote, isCurrent);
+  if (replayed) return replayed;
+  if (!isCurrent()) return { kind: "cancelled" };
   const report = await preflightDraftlineMergeIncoming(remote);
   return isCurrent() ? settle(report, remote, isCurrent) : { kind: "cancelled" };
+}
+
+/** Refusals after which combining the work with a named version still can. */
+const MERGE_INSTEAD = new Set(["incoming_conflicts", "versions_already_shared", "rebase_unsupported", "preflight_failed", "versions_on_other_timelines"]);
+
+/**
+ * Brings the team's work in by replaying the unsent saves on top of it, so no
+ * extra version is made. Returns null when the work has to be combined
+ * instead: files changed on both sides, saves another timeline also holds
+ * (replaying would leave that timeline on the old copies), or history the
+ * replay doesn't support. Every refusal leaves the project as it was.
+ */
+async function replayUnsentSaves(remote: string, isCurrent: () => boolean): Promise<TeamUpdateOutcome | null> {
+  const report = await preflightDraftlineRebaseIncoming(remote);
+  if (!isCurrent()) return { kind: "cancelled" };
+  if (!report.can_rebase) return null;
+  try {
+    const rebase = await rebaseDraftlineIncoming(remote);
+    // Another project is open now, so these tabs aren't the old project's. The
+    // old copies of the replayed saves still exist, so its own tabs keep working.
+    if (!isCurrent()) return { kind: "cancelled" };
+    applyRebasedIds(rebasedIds(rebase.rewritten, rebase.dropped));
+    return { kind: "brought-in", count: rebase.incoming.length };
+  } catch (error) {
+    if (MERGE_INSTEAD.has(draftlineErrorCode(error) ?? "")) return null;
+    throw error;
+  }
+}
+
+/** Whether people in this repository name versions the conventional way ("feat: …"). */
+function conventionalRepository(report: DraftlineMergeIncomingReport): boolean {
+  const names = [
+    ...report.incoming.map((version) => version.name),
+    ...useVersioningStore.getState().graphNodes.map((node) => node.message),
+  ];
+  return usesConventionalNames(names);
 }
 
 async function settle(
@@ -71,10 +115,9 @@ async function settle(
   const count = report.incoming.length || status.behind;
   if (report.dirtyFiles.length > 0) return { kind: "blocked", message: SAVE_BEFORE_UPDATES_MESSAGE, status };
   if (report.canMergeCleanly && report.token) {
-    // Interim until Draftline's rebase_onto_incoming: a token-pinned merge with
-    // a generated name. The rebase will replay the user's saves on top instead,
-    // so history shows only versions people named themselves.
-    await mergeDraftlineIncomingWithToken(report.token, teamUpdatesLabel(report.incoming), remote);
+    // The replay couldn't run, so the work is combined in a version with a generated name.
+    const label = teamUpdatesLabel(report.incoming, conventionalRepository(report));
+    await mergeDraftlineIncomingWithToken(report.token, label, remote);
     return isCurrent() ? { kind: "brought-in", count } : { kind: "cancelled" };
   }
   if (report.conflicts.length > 0 && report.token) {

@@ -10,6 +10,8 @@ import {
   type MergeIncomingReport,
   type MergeIncomingToken,
   type PreflightReport,
+  type RebaseIncomingReport,
+  type RebaseOutcome,
   type RecoveryState,
   type RemoteVariation,
   type RenameVariationResult,
@@ -389,6 +391,15 @@ export async function applyDraftlineIncoming(remote: string): Promise<number> {
 
 export async function preflightDraftlineMergeIncoming(remote: string): Promise<DraftlineMergeIncomingReport> {
   return mergeIncomingReportToDto(await facade().preflightMergeIncoming(remote));
+}
+
+/** Fetches, then whether the unsent saves can be replayed on top of the team's. */
+export async function preflightDraftlineRebaseIncoming(remote: string): Promise<RebaseIncomingReport> {
+  return facade().preflightRebaseIncoming(remote);
+}
+
+export async function rebaseDraftlineIncoming(remote: string): Promise<RebaseOutcome> {
+  return (await facade().rebaseIncoming(remote)).rebase;
 }
 
 /**

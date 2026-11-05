@@ -112,8 +112,7 @@ pub struct RecordingInner {
 
 /// A browser prepared for recording; it stays open across takes and is dropped on disconnect.
 pub struct BrowserConnection {
-    /// Process-unique id, used to ensure a superseded connection's terminal
-    /// event cannot clear the connection that replaced it.
+    /// Process-unique id, so a superseded connection can't clear its replacement.
     pub id: u64,
     /// The Playwright sidecar managing the browser.
     pub sidecar: SidecarManager,
@@ -137,8 +136,7 @@ pub struct AppState {
     pub current_repo: Mutex<Option<RepoView>>,
     /// The active project within the repo (`project_root()` reads it). In single-project mode, root == repo root.
     pub current_project: Mutex<Option<ProjectView>>,
-    /// The prepared browser connection (if any).
-    /// Uses `tokio::sync::Mutex` because it's held across await points.
+    /// The prepared browser connection, if any (a tokio mutex: held across awaits).
     pub browser: Arc<tokio::sync::Mutex<Option<BrowserConnection>>>,
     /// Per-run steering registry: routes composer messages to the in-flight run they target
     /// (keyed by client run id), so concurrent runs never drain each other's steering.
@@ -699,6 +697,8 @@ pub fn run() {
             commands::draftline::preflight_merge_incoming,
             commands::draftline_merge::merge_incoming_with_token,
             commands::draftline_merge::preflight_merge_variation,
+            commands::draftline_rebase::preflight_rebase_incoming,
+            commands::draftline_rebase::rebase_incoming,
             commands::draftline_merge::merge_variation_with_resolutions,
             commands::draftline_shelf::preflight_apply_shelf,
             commands::draftline::merge_incoming_with_resolutions,

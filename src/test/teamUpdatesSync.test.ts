@@ -7,6 +7,8 @@ const dl = vi.hoisted(() => ({
   mergeIncoming: vi.fn(async (..._args: unknown[]) => "merge123"),
   publish: vi.fn(async () => undefined),
   auth: vi.fn(async () => ({ connected: true })),
+  preflightRebase: vi.fn(),
+  rebase: vi.fn(),
 }));
 vi.mock("../services/draftlineVersioning", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../services/draftlineVersioning")>()),
@@ -15,12 +17,16 @@ vi.mock("../services/draftlineVersioning", async (importOriginal) => ({
   applyDraftlineIncoming: dl.applyIncoming,
   mergeDraftlineIncomingWithToken: dl.mergeIncoming,
   publishDraftlineChanges: dl.publish,
+  preflightDraftlineRebaseIncoming: dl.preflightRebase,
+  rebaseDraftlineIncoming: dl.rebase,
 }));
 vi.mock("../services/githubSetup", () => ({ getGitHubAuthStatus: dl.auth }));
 
 import { MERGE_UPDATES_CHANGED_MESSAGE } from "../services/draftlineErrors";
 import { SAVE_BEFORE_UPDATES_MESSAGE, TEAM_UPDATES_SOURCE } from "../services/teamUpdates";
-import { useAppStore } from "../stores/appStore";
+import { compareTabPath, parseCompareTabPath } from "../domain/compare/compareTarget";
+import { snapshotDiffTabPath } from "../domain/versioning/snapshotDiffTab";
+import { makeMainTabId, makeSplitTabId, useAppStore } from "../stores/appStore";
 import { useMergeNameStore } from "../stores/mergeNameStore";
 import { useSyncStore } from "../stores/syncStore";
 import { useToastStore } from "../stores/toastStore";
@@ -42,6 +48,8 @@ function connect(status = { state: "needsMerge", ahead: 1, behind: 1 }) {
   });
   useVersioningStore.setState({ loadVersions: noop, loadGraphData: noop, loadTimelines: noop, checkDirty: noop });
   dl.preflightIncoming.mockResolvedValue({ canProceed: false, dirtyFiles: [], syncStatus: status });
+  // By default the replay can't run, so the work is combined (the fallback).
+  dl.preflightRebase.mockResolvedValue({ can_rebase: false, local_versions: [], conflicts: [], unsupported: "merge history" });
   dl.preflightMerge.mockResolvedValue({ canMergeCleanly: true, token: TOKEN, conflicts: [], incoming: INCOMING, dirtyFiles: [], syncStatus: status });
 }
 
@@ -59,7 +67,7 @@ describe("getting team updates", () => {
     const outcome = await useSyncStore.getState().pullFromRemote();
     expect(outcome).toEqual({ kind: "brought-in", count: 1 });
     expect(useMergeNameStore.getState().pending).toBeNull();
-    expect(dl.mergeIncoming).toHaveBeenCalledWith(TOKEN, "Brought in team updates\n\n- #24 lead queue with wing-light hero (Dana)", "origin");
+    expect(dl.mergeIncoming).toHaveBeenCalledWith(TOKEN, "Bring in team updates\n\n- #24 lead queue with wing-light hero (Dana)", "origin");
     expect(useSyncStore.getState().isSyncing).toBe(false);
   });
 
@@ -99,6 +107,123 @@ describe("getting team updates", () => {
   });
 });
 
+describe("replaying unsent saves on the team's", () => {
+  const OLD = "a".repeat(40);
+  const NEW = "b".repeat(40);
+  const GONE = "c".repeat(40);
+  const BASE = "d".repeat(40);
+
+  function replayable() {
+    connect();
+    dl.preflightRebase.mockResolvedValue({ can_rebase: true, local_versions: [{ id: OLD }, { id: GONE }], conflicts: [], unsupported: null });
+    dl.rebase.mockResolvedValue({ rewritten: [{ from: OLD, to: NEW }], dropped: [GONE], incoming: INCOMING });
+  }
+
+  function tab(type: "snapshot-preview" | "compare" | "diff" | "note", path: string, split = false) {
+    return { id: (split ? makeSplitTabId : makeMainTabId)(type, path), type, path, title: path };
+  }
+
+  it("brings the team's work in with no new version and no name", async () => {
+    replayable();
+    expect(await useSyncStore.getState().pullFromRemote()).toEqual({ kind: "brought-in", count: 1 });
+    expect(dl.rebase).toHaveBeenCalledWith("origin");
+    expect(dl.preflightMerge).not.toHaveBeenCalled();
+    expect(dl.mergeIncoming).not.toHaveBeenCalled();
+    expect(useMergeNameStore.getState().pending).toBeNull();
+  });
+
+  it("keeps History previews and Compare tabs on the replayed saves", async () => {
+    replayable();
+    const compare = compareTabPath({ from: BASE, to: OLD, fromLabel: "outline", toLabel: OLD.slice(0, 7), path: null, documentTitle: null });
+    const gone = compareTabPath({ from: GONE, to: "workspace", fromLabel: "x", toLabel: "Now", path: null, documentTitle: null });
+    const note = tab("note", "intro.md");
+    const preview = tab("snapshot-preview", `snapshot:${OLD}`);
+    useAppStore.setState({
+      openTabs: [note, preview, tab("compare", compare), tab("compare", gone), tab("diff", snapshotDiffTabPath(OLD, "intro.sk")), tab("diff", snapshotDiffTabPath(GONE, "a.md"))],
+      activeTabId: preview.id,
+      splitTabs: [tab("snapshot-preview", `snapshot:${GONE}`, true), tab("compare", compare, true)],
+      splitActiveTabId: makeSplitTabId("snapshot-preview", `snapshot:${GONE}`),
+      _persistTabs: vi.fn(),
+    });
+    useVersioningStore.setState({
+      startedBranchFromSnapshot: { branchName: "alt", snapshotId: OLD },
+      diffSelection: { from: OLD, to: "working" },
+    });
+
+    await useSyncStore.getState().pullFromRemote();
+
+    const { openTabs, activeTabId, splitTabs, splitActiveTabId } = useAppStore.getState();
+    expect(openTabs.map((t) => t.path)).toEqual(["intro.md", `snapshot:${NEW}`, expect.stringContaining("compare"), snapshotDiffTabPath(NEW, "intro.sk")]);
+    expect(openTabs[3].id).toBe(makeMainTabId("diff", snapshotDiffTabPath(NEW, "intro.sk")));
+    expect(activeTabId).toBe(makeMainTabId("snapshot-preview", `snapshot:${NEW}`));
+    const target = parseCompareTabPath(openTabs[2].path)!;
+    expect(target).toMatchObject({ from: BASE, to: NEW, fromLabel: "outline", toLabel: NEW.slice(0, 7) });
+    expect(openTabs[2].id).toBe(makeMainTabId("compare", openTabs[2].path));
+    expect(splitTabs).toHaveLength(1);
+    expect(splitTabs[0].id).toBe(makeSplitTabId("compare", splitTabs[0].path));
+    expect(splitActiveTabId).toBe(splitTabs[0].id);
+    expect(useVersioningStore.getState().startedBranchFromSnapshot).toEqual({ branchName: "alt", snapshotId: NEW });
+    expect(useVersioningStore.getState().diffSelection).toEqual({ from: NEW, to: "working" });
+  });
+
+  it("combines the work instead when another timeline holds an unsent save", async () => {
+    replayable();
+    dl.rebase.mockRejectedValueOnce({ code: "versions_on_other_timelines", message: "no", details: { timelines: ["alt"] } });
+    expect(await useSyncStore.getState().pullFromRemote()).toEqual({ kind: "brought-in", count: 1 });
+    expect(dl.mergeIncoming).toHaveBeenCalledOnce();
+  });
+
+  it.each(["versions_already_shared", "rebase_unsupported", "preflight_failed"])(
+    "combines the work instead when the replay refuses with %s",
+    async (code) => {
+      replayable();
+      dl.rebase.mockRejectedValueOnce({ code, message: "no" });
+      expect(await useSyncStore.getState().pullFromRemote()).toEqual({ kind: "brought-in", count: 1 });
+      expect(dl.mergeIncoming).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("frames a real conflict around files", async () => {
+    replayable();
+    dl.rebase.mockRejectedValueOnce({ code: "incoming_conflicts", message: "no", details: { paths: ["compass.sk"] } });
+    dl.preflightMerge.mockResolvedValue({
+      canMergeCleanly: false, token: TOKEN, incoming: INCOMING, dirtyFiles: [],
+      conflicts: [{ path: "compass.sk" }], syncStatus: { ahead: 1, behind: 1 },
+    });
+    expect((await useSyncStore.getState().pullFromRemote())?.kind).toBe("conflict");
+    expect(useVersioningStore.getState()).toMatchObject({ isMerging: true, mergeSource: TEAM_UPDATES_SOURCE });
+  });
+
+  it("leaves another project's tabs alone when it was opened during the replay", async () => {
+    replayable();
+    const preview = tab("snapshot-preview", `snapshot:${OLD}`);
+    useAppStore.setState({ openTabs: [preview], activeTabId: preview.id, _persistTabs: vi.fn() });
+    dl.rebase.mockImplementationOnce(async () => {
+      beginWorkspaceGeneration('C:/other');
+      return { rewritten: [{ from: OLD, to: NEW }], dropped: [], incoming: INCOMING };
+    });
+    expect(await useSyncStore.getState().pullFromRemote()).toEqual({ kind: "cancelled" });
+    expect(useAppStore.getState().openTabs).toEqual([preview]);
+  });
+
+  it("stops on a locked project without combining anything", async () => {
+    replayable();
+    dl.rebase.mockRejectedValueOnce({ code: "workspace_locked", message: "locked" });
+    expect(await useSyncStore.getState().pullFromRemote()).toBeNull();
+    expect(dl.mergeIncoming).not.toHaveBeenCalled();
+    expect(useSyncStore.getState().syncError).toBeTruthy();
+  });
+
+  it("names the combined version the conventional way when the repository does", async () => {
+    connect();
+    useVersioningStore.setState({
+      graphNodes: ["feat: intro", "fix(ui): spacing", "docs: notes"].map((message, i) => ({ id: String(i), message }) as never),
+    });
+    await useSyncStore.getState().pullFromRemote();
+    expect(dl.mergeIncoming).toHaveBeenCalledWith(TOKEN, expect.stringMatching(/^chore\(sync\): bring in team updates \(#24\)\n/), "origin");
+  });
+});
+
 describe("send with team updates waiting", () => {
   function sendSetup(hybrid: boolean) {
     connect();
@@ -110,6 +235,7 @@ describe("send with team updates waiting", () => {
     // After the update, the merge itself is one more save to send.
     const refreshSyncStatus = vi.fn(async () => {
       if (dl.mergeIncoming.mock.calls.length > 0) useSyncStore.setState({ syncStatus: { ahead: 2, behind: 0 } });
+      if (dl.rebase.mock.calls.length > 0) useSyncStore.setState({ syncStatus: { ahead: 1, behind: 0 } });
     });
     useSyncStore.setState({ fetchFromRemote: vi.fn(async () => undefined), pushToRemote, sendForReview, refreshSyncStatus });
     useAppStore.setState({ currentProject: { name: "talk", root: "C:/talk", hybrid } as never });
@@ -124,6 +250,17 @@ describe("send with team updates waiting", () => {
     expect(pushToRemote).toHaveBeenCalledOnce();
     expect(show).toHaveBeenCalledWith("Sent ✓ (also picked up 1 team update)", "success");
     expect(useMergeNameStore.getState().pending).toBeNull();
+  });
+
+  it("replays the unsent saves, then actually sends", async () => {
+    const { pushToRemote } = sendSetup(false);
+    dl.preflightRebase.mockResolvedValue({ can_rebase: true, local_versions: [{ id: "a" }], conflicts: [], unsupported: null });
+    dl.rebase.mockResolvedValue({ rewritten: [], dropped: [], incoming: INCOMING });
+    const show = vi.spyOn(useToastStore.getState(), "showUpdate");
+    await useSyncStore.getState().syncWithRemote();
+    expect(dl.mergeIncoming).not.toHaveBeenCalled();
+    expect(pushToRemote).toHaveBeenCalledOnce();
+    expect(show).toHaveBeenCalledWith("Sent ✓ (also picked up 1 team update)", "success");
   });
 
   it("sends a hybrid project for review under the user's own save name", async () => {

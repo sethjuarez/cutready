@@ -8,6 +8,7 @@ pub mod diagnostics;
 pub mod draftline;
 pub mod draftline_history;
 pub mod draftline_merge;
+pub mod draftline_rebase;
 pub mod draftline_shelf;
 pub mod export;
 pub mod feedback;
