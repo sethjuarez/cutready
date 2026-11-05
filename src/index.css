@@ -11,10 +11,10 @@
   --color-accent: 107 92 231;
   --color-accent-hover: 82 67 199;
   /* Fallbacks only: derived per palette from the accent at runtime. */
-  --color-content-storyboard: 15 118 110;
+  --color-content-storyboard: 7 121 104;
   --color-content-sketch: 107 92 231;
-  --color-content-note: 194 105 17;
-  --color-content-chat: 182 60 143;
+  --color-content-note: 178 78 2;
+  --color-content-chat: 192 51 150;
   --color-border: 222 223 226;
   --color-border-subtle: 233 234 237;
   --color-text: 27 27 27;
@@ -110,10 +110,10 @@
   --color-surface-toolbar: 26 26 28;
   --color-accent: 164 154 250;
   --color-accent-hover: 189 181 255;
-  --color-content-storyboard: 94 234 212;
+  --color-content-storyboard: 0 196 184;
   --color-content-sketch: 164 154 250;
-  --color-content-note: 251 191 36;
-  --color-content-chat: 236 138 190;
+  --color-content-note: 221 153 54;
+  --color-content-chat: 230 131 185;
   --color-border: 66 66 68;
   --color-border-subtle: 54 54 56;
   --color-text: 255 255 255;

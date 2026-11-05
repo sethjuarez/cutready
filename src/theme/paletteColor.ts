@@ -132,12 +132,38 @@ function bestAccentForeground(accent: Rgb): string {
   return rgbToToken(contrastRatio(white, accent) >= contrastRatio(ink, accent) ? white : ink);
 }
 
+/** The sidebar's selected row: --nav-selected (index.css) over the inset surface. */
+export function navSelectedBackground(tokens: ThemeColorTokens): Rgb {
+  const inset = tokenToRgb(tokens.surfaceInset);
+  return isLightTokens(tokens) ? mixRgb(inset, NAV_SELECTED.light, 0.15) : mixRgb(inset, NAV_SELECTED.dark, 0.2);
+}
+
+const NAV_SELECTED: Record<"light" | "dark", Rgb> = { light: [129, 139, 152], dark: [101, 108, 118] };
+
+/** The peak tints of --mica (index.css), which sit over the inset surface behind the sidebar. Keep in sync. */
+export const MICA_TINTS: Record<"light" | "dark", Array<[Rgb, number]>> = {
+  light: [[[204, 196, 240], 0.62], [[193, 212, 238], 0.5], [[190, 226, 219], 0.5], [[214, 208, 238], 0.4]],
+  dark: [[[104, 90, 170], 0.24], [[64, 92, 140], 0.2], [[52, 108, 100], 0.18]],
+};
+
+function isLightTokens(tokens: ThemeColorTokens): boolean {
+  return relativeLuminance(tokenToRgb(tokens.surface)) > 0.5;
+}
+
+/** Everything a sidebar row can sit on: the inset or a mica peak, each plain or selected. */
+export function sidebarBackdrops(tokens: ThemeColorTokens): Rgb[] {
+  const mode = isLightTokens(tokens) ? "light" : "dark";
+  const inset = tokenToRgb(tokens.surfaceInset);
+  const plain = [inset, ...MICA_TINTS[mode].map(([tint, alpha]) => mixRgb(inset, tint, alpha))];
+  const selectedAlpha = mode === "light" ? 0.15 : 0.2;
+  return [...plain, ...plain.map((backdrop) => mixRgb(backdrop, NAV_SELECTED[mode], selectedAlpha))];
+}
+
 function polishTokens(tokens: ThemeColorTokens): ThemeColorTokens {
   const surface = tokenToRgb(tokens.surface);
   const isLight = relativeLuminance(surface) > 0.5;
-  const inset = tokenToRgb(tokens.surfaceInset);
-  // The sidebar's selected row: --nav-selected (index.css) over the inset surface.
-  const navSelected = isLight ? mixRgb(inset, [129, 139, 152], 0.15) : mixRgb(inset, [101, 108, 118], 0.2);
+  const navSelected = navSelectedBackground(tokens);
+
   const surfaces = [tokens.surface, tokens.surfaceAlt, tokens.surfaceInset].map(tokenToRgb);
   const extreme: Rgb = isLight ? [0, 0, 0] : [255, 255, 255];
   // Body and secondary text must stay AA on every surface they sit on, not just the base surface.
@@ -242,11 +268,14 @@ export function deriveContentTokens(
   const accent = tokenToRgb(tokens.accent);
   const surface = tokenToRgb(tokens.surface);
   const text = tokenToRgb(tokens.text);
+  // Sidebar icons tinted with these sit on the mica sidebar, plain or selected; icons need 3:1 (WCAG 1.4.11).
+  const iconBackgrounds = sidebarBackdrops(tokens);
 
   return Object.fromEntries(
     Object.entries(CONTENT_HUE_OFFSETS).map(([key, offset]) => {
       const rotated = rotateHue(accent, offset, CONTENT_MINIMUM_CHROMA);
-      return [key, rgbToToken(ensureContrast(rotated, surface, text, 4.5))];
+      const legible = ensureContrast(rotated, surface, text, 4.5);
+      return [key, rgbToToken(iconBackgrounds.reduce((value, bg) => ensureContrast(value, bg, text, 3), legible))];
     })
   ) as Record<ContentTypeTokenKey, string>;
 }
