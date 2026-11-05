@@ -22,7 +22,7 @@
     "src-tauri/src/engine/agent/tools.rs": 7357,
     "src-tauri/src/engine/export.rs": 3553,
     "src-tauri/src/engine/memory.rs": 1091,
-    "src-tauri/src/engine/project.rs": 4911,
+    "src-tauri/src/engine/project.rs": 4902,
     "src-tauri/src/engine/recording_native_camera_windows.rs": 892,
     "src-tauri/src/engine/recording.rs": 3808,
     "src-tauri/src/engine/video_import.rs": 2037,

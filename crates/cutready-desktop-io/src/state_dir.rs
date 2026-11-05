@@ -66,7 +66,26 @@ pub fn hybrid_git_root(root: &Path) -> Option<PathBuf> {
 /// A stray `.git` holding only CutReady state (an old bug wrote one into
 /// hybrid project folders) has no `HEAD`, so it must not count as a repository.
 pub fn is_git_dir(path: &Path) -> bool {
-    path.join("HEAD").is_file() && (path.join("objects").is_dir() || path.join("commondir").is_file())
+    path.join("HEAD").is_file()
+        && (path.join("objects").is_dir() || path.join("commondir").is_file())
+}
+
+/// The git dir holding a CutReady folder and the folder's path relative to
+/// the work tree (empty at the root). Works for standalone, hybrid, and
+/// linked-worktree folders alike.
+pub fn folder_git_location(root: &Path) -> Option<(PathBuf, PathBuf)> {
+    let dot_git = root.join(".git");
+    if is_git_dir(&dot_git) {
+        return Some((std::fs::canonicalize(dot_git).ok()?, PathBuf::new()));
+    }
+    enclosing_git_dir(root)
+}
+
+/// Whether `dir` is the work-tree root of a repository: its `.git` is a real
+/// git dir or a gitlink file (linked worktrees and submodules).
+pub fn has_own_repository(dir: &Path) -> bool {
+    let dot_git = dir.join(".git");
+    dot_git.is_file() || is_git_dir(&dot_git)
 }
 
 /// For a CutReady folder without its own `.git` directory, find the enclosing
