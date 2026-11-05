@@ -17,7 +17,6 @@ export interface PreActionRequest {
 export interface PendingPreAction extends PreActionRequest {
   id: number;
   changeCount: number;
-  canSetAside: boolean;
 }
 
 interface PreActionState {

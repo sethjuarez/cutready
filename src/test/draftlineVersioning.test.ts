@@ -23,8 +23,6 @@ import {
   listDraftlineRemoteBranches,
   listDraftlineTimelines,
   listDraftlineVersions,
-  hasDraftlineShelf,
-  popDraftlineShelf,
   preflightDraftlineRenameVariation,
   preflightDraftlineSwitchVariation,
   previewDraftlineVersion,
@@ -32,13 +30,13 @@ import {
   saveDraftlineVersion,
   sendForReview,
   setDraftlineWorkspacePath,
-  shelveDraftlineChanges,
   switchDraftlineVariation,
   inspectDraftlineProjectHealth,
   resolveDraftlineRecovery,
   retryDraftlineContentDownload,
   HEALTHY_PROJECT,
 } from "../services/draftlineVersioning";
+import { setAsideChanges } from "../services/setAsideShelves";
 
 const WORKSPACE = "D:\\project";
 
@@ -634,63 +632,6 @@ describe("draftlineVersioning", () => {
     });
   });
 
-  it("uses Draftline shelves for stash-compatible operations", async () => {
-    mockInvoke
-      .mockResolvedValueOnce({
-        files: [{ path: "intro.sk", kind: "Modified", is_binary: false, is_large: false }],
-        diff: null,
-      })
-      .mockResolvedValueOnce({
-        shelf: {
-          id: "cutready-stash",
-          version: version("3333333333333333333333333333333333333333", "Shelved changes", 1_700_000_200),
-        },
-        postconditions: { errors: [] },
-      })
-      .mockResolvedValueOnce([
-        {
-          id: "cutready-stash",
-          version: version("3333333333333333333333333333333333333333", "Shelved changes", 1_700_000_200),
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          id: "cutready-stash",
-          version: version("3333333333333333333333333333333333333333", "Shelved changes", 1_700_000_200),
-        },
-      ])
-      .mockResolvedValueOnce({
-        shelf: {
-          id: "cutready-stash",
-          version: version("3333333333333333333333333333333333333333", "Shelved changes", 1_700_000_200),
-        },
-        postconditions: { errors: [] },
-      })
-      .mockResolvedValueOnce(undefined);
-
-    await expect(shelveDraftlineChanges()).resolves.toBeUndefined();
-    await expect(hasDraftlineShelf()).resolves.toBe(true);
-    await expect(popDraftlineShelf()).resolves.toBe(true);
-    expect(mockInvoke).toHaveBeenNthCalledWith(1, "get_changes", {
-      request: { workspace_path: WORKSPACE },
-    });
-    expect(mockInvoke).toHaveBeenNthCalledWith(2, "selected_shelve", {
-      request: { workspace_path: WORKSPACE, paths: ["intro.sk"], name: "cutready-stash" },
-    });
-    expect(mockInvoke).toHaveBeenNthCalledWith(3, "list_shelves", {
-      request: { workspace_path: WORKSPACE },
-    });
-    expect(mockInvoke).toHaveBeenNthCalledWith(4, "list_shelves", {
-      request: { workspace_path: WORKSPACE },
-    });
-    expect(mockInvoke).toHaveBeenNthCalledWith(5, "apply_shelf", {
-      request: { workspace_path: WORKSPACE, shelf_id: "cutready-stash" },
-    });
-    expect(mockInvoke).toHaveBeenNthCalledWith(6, "delete_shelf", {
-      request: { workspace_path: WORKSPACE, shelf_id: "cutready-stash" },
-    });
-  });
-
   describe("binds operations to the initiating workspace (#263)", () => {
     const OTHER = "D:\\other-project";
 
@@ -738,7 +679,7 @@ describe("draftlineVersioning", () => {
           postconditions: { errors: [] },
         });
 
-      await shelveDraftlineChanges();
+      await setAsideChanges("Before x");
 
       expect(mockInvoke).toHaveBeenNthCalledWith(1, "get_changes", {
         request: { workspace_path: WORKSPACE },

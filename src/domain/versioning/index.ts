@@ -7,3 +7,4 @@ export * from "./syncError";
 export * from "./projectScope";
 export * from "./timelines";
 export * from "./preAction";
+export * from "./setAsideShelf";

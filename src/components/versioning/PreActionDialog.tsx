@@ -91,17 +91,12 @@ export function PreActionDialog({ pending, onClose }: { pending: PendingPreActio
                 <p className="mt-1 text-sm text-[rgb(var(--color-text-secondary))]">
                   You have {count} unsaved {count === 1 ? "change" : "changes"}. Before{" "}
                   <span className="font-medium text-[rgb(var(--color-text))]">{pending.target}</span>, save them as a version
-                  {pending.canSetAside ? " or set them aside to bring back later" : ""}.
+                  {" "}or set them aside to bring back later.
                 </p>
                 {chips.length > 0 && (
                   <p className="mt-1 text-xs text-[rgb(var(--color-text-secondary))]" data-testid="pre-action-summary">{chips.join(" · ")}</p>
                 )}
                 <WorkspaceChangesList />
-                {!pending.canSetAside && (
-                  <p className="mt-2 text-xs text-[rgb(var(--color-text-secondary))]">
-                    Set aside isn't available while other set-aside changes are waiting to be brought back.
-                  </p>
-                )}
               </>
             ) : (
               <p className="mt-1 text-sm text-[rgb(var(--color-text-secondary))]" role="alert">
@@ -118,7 +113,7 @@ export function PreActionDialog({ pending, onClose }: { pending: PendingPreActio
               onCancel={close}
               disabled={working}
               onBusyChange={setSaving}
-              extraAction={pending.canSetAside && (
+              extraAction={(
                 <button type="button" className={secondaryClass} disabled={busy} onClick={() => void setAside()} data-testid="pre-action-set-aside">
                   Set aside &amp; continue
                 </button>

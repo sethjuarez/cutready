@@ -1,7 +1,8 @@
-import { AlertTriangle, Archive, Download, Lock } from "lucide-react";
-import type { ReactNode } from "react";
+import { AlertTriangle, Download, Lock } from "lucide-react";
 import { useVersioningStore } from "../stores/versioningStore";
 import { recoveryInOtherFolderMessage } from "../services/draftlineErrors";
+import { BannerButton, BannerRow } from "./BannerParts";
+import { SetAsideBanner } from "./versioning/SetAsideBanner";
 
 const OPERATION_LABELS: Record<string, string> = {
   save_version: "save",
@@ -31,33 +32,6 @@ function operationLabel(operation: string): string {
   return OPERATION_LABELS[key] ?? key.replace(/_/g, " ");
 }
 
-function BannerButton({ onClick, disabled, label, children }: { onClick: () => void; disabled: boolean; label?: string; children: ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={label}
-      className="shrink-0 rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-2 py-0.5 text-xs font-medium text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-inset))] disabled:opacity-50"
-    >
-      {children}
-    </button>
-  );
-}
-
-function BannerRow({ icon, testId, children }: { icon: ReactNode; testId: string; children: ReactNode }) {
-  return (
-    <div
-      data-testid={testId}
-      role="status"
-      className="flex items-center gap-2 border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))] px-3 py-1.5 text-xs text-[rgb(var(--color-text-secondary))]"
-    >
-      {icon}
-      {children}
-    </div>
-  );
-}
-
 /**
  * Shows what an interrupted or crashed operation left behind (pending
  * recovery, a stale lock) and large files whose content isn't downloaded,
@@ -70,8 +44,6 @@ export function ProjectHealthBanner() {
   const dismissRecovery = useVersioningStore((s) => s.dismissRecovery);
   const clearStaleLock = useVersioningStore((s) => s.clearStaleLock);
   const retryContentDownload = useVersioningStore((s) => s.retryContentDownload);
-  const hasStash = useVersioningStore((s) => s.hasStash);
-  const popStash = useVersioningStore((s) => s.popStash);
   const warningIcon = <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-[rgb(var(--color-warning))]" />;
 
   return (
@@ -109,12 +81,7 @@ export function ProjectHealthBanner() {
           <BannerButton onClick={() => void retryContentDownload()} disabled={busy}>Download</BannerButton>
         </BannerRow>
       )}
-      {hasStash && (
-        <BannerRow testId="project-health-shelf" icon={<Archive className="h-3.5 w-3.5 shrink-0 text-[rgb(var(--color-accent))]" />}>
-          <span className="flex-1">You have shelved changes.</span>
-          <BannerButton onClick={() => void popStash()} disabled={busy || !!health.recovery} label="Restore shelved changes">Restore</BannerButton>
-        </BannerRow>
-      )}
+      <SetAsideBanner disabled={busy || !!health.recovery} />
     </>
   );
 }

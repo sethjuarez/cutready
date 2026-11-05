@@ -41,7 +41,7 @@ function dirtyDomainStores() {
     isDirty: true,
     changedFiles: [{ path: "intro.sk", status: "modified", additions: 1, deletions: 0 }],
     saving: true,
-    hasStash: true,
+    setAsideShelves: [{ id: "cutready-stash", name: "Set-aside changes", timeMs: 0 }],
     projectHealthBusy: true,
     isRewound: true,
     isMerging: true,

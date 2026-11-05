@@ -7,7 +7,6 @@ import {
   deleteDraftlineVariation,
   discardDraftlineChanges,
   discardDraftlineFile,
-  hasDraftlineShelf,
   hasDraftlineChanges,
   isDraftlineVariationCreateConflictError,
   listDraftlineChangedFiles,
@@ -17,11 +16,9 @@ import {
   listDraftlineVersions,
   preflightDraftlineSwitchVariation,
   mergeDraftlineIncomingWithResolutions,
-  popDraftlineShelf,
   preflightDraftlineRenameVariation,
   renameDraftlineVariation,
   saveDraftlineVersion,
-  shelveDraftlineChanges,
   switchDraftlineVariation,
   HEALTHY_PROJECT,
   clearDraftlineStaleLock,
@@ -36,10 +33,13 @@ import { useToastStore } from "./toastStore";
 import { useAppStore } from "./appStore";
 import { useSyncStore } from "./syncStore";
 import { activeTimelineLabel, askMergeName } from "../services/mergeName";
+import { deleteSetAsideShelf, listSetAsideShelves, restoreSetAsideShelf, setAsideChanges } from "../services/setAsideShelves";
+import { DEFAULT_SET_ASIDE_NAME, type SetAsideShelf } from "../domain/versioning";
 import {
   clearActiveDocumentState,
   currentWorkspaceGeneration,
   errorMessage,
+  flushEditorWrites,
   loadingDocumentStateForTab,
   replaceWorkspaceFile,
   rewriteWorkspaceFiles,
@@ -70,8 +70,10 @@ export interface VersioningState {
   changedFiles: DiffEntry[];
   /** Whether a version save is in progress. */
   saving: boolean;
-  /** Whether a stash (temporarily saved work) exists. */
-  hasStash: boolean;
+  /** Work set aside to bring back later, newest first. */
+  setAsideShelves: SetAsideShelf[];
+  /** A set-aside restore or delete is running. */
+  setAsideBusy: boolean;
   projectHealth: DraftlineProjectHealth;
   projectHealthBusy: boolean;
   /** Whether we are viewing a rewound snapshot (prev-tip exists). */
@@ -107,8 +109,8 @@ export interface VersioningActions {
   refreshChangedFiles: () => Promise<void>;
   /** Save a labeled version. Optional forkLabel for naming the old timeline when forking. */
   saveVersion: (label: string, forkLabel?: string) => Promise<void>;
-  /** Shelve all unsaved changes so the workspace is clean. False if nothing was shelved. */
-  stashChanges: () => Promise<boolean>;
+  /** Sets all unsaved changes aside in a new shelf so the workspace is clean. False if nothing was set aside. */
+  stashChanges: (name?: string) => Promise<boolean>;
   /** Discard all working-directory changes, resetting to last snapshot. */
   discardChanges: () => Promise<void>;
   /** Discard changes for one file. */
@@ -122,9 +124,11 @@ export interface VersioningActions {
     filePath: string,
     replace: (paths: { repoPath: string; projectPath: string }) => Promise<unknown>,
   ) => Promise<void>;
-  /** Restore shelved changes into the workspace. */
-  popStash: () => Promise<void>;
-  /** Check whether a stash exists. */
+  /** Brings one set-aside shelf back into the workspace and deletes it. */
+  popStash: (shelfId: string) => Promise<void>;
+  /** Deletes a set-aside shelf for good. */
+  dropStash: (shelfId: string) => Promise<void>;
+  /** Reloads the set-aside shelves. */
   checkStash: () => Promise<void>;
   /** Interrupted operations, stale locks, and missing LFS content for the open project. */
   checkProjectHealth: (options?: { probeContent?: boolean }) => Promise<void>;
@@ -187,7 +191,8 @@ export function resetVersioningState(): Omit<VersioningState, "saving"> {
     startedBranchFromSnapshot: null,
     isDirty: false,
     changedFiles: [],
-    hasStash: false,
+    setAsideShelves: [],
+    setAsideBusy: false,
     projectHealth: HEALTHY_PROJECT,
     projectHealthBusy: false,
     isRewound: false,
@@ -269,14 +274,13 @@ export const useVersioningStore = create<VersioningStoreState>((set, get) => ({
     }
   },
 
-  stashChanges: async () => {
-    if (get().hasStash) {
-      useToastStore.getState().show("Restore your shelved changes before shelving more.", 5000, "warning");
-      return false;
-    }
-    const shelved = await rewriteWorkspaceFiles(shelveDraftlineChanges, "Shelve failed");
-    if (shelved) await get().checkStash();
-    return shelved && get().hasStash;
+  stashChanges: async (name = DEFAULT_SET_ASIDE_NAME) => {
+    let shelved = false;
+    const ok = await rewriteWorkspaceFiles(async () => {
+      shelved = await setAsideChanges(name);
+    }, "Set aside failed");
+    await get().checkStash();
+    return ok && shelved;
   },
 
   discardChanges: async () => {
@@ -294,21 +298,50 @@ export const useVersioningStore = create<VersioningStoreState>((set, get) => ({
     }
   },
 
-  popStash: async () => {
-    let restored = false;
-    await rewriteWorkspaceFiles(async () => {
-      restored = await popDraftlineShelf();
-    }, "Restore failed");
-    await get().checkStash();
-    if (restored) useToastStore.getState().show("Shelved changes restored.", 3000, "success");
+  popStash: async (shelfId) => {
+    if (get().setAsideBusy) return;
+    set({ setAsideBusy: true });
+    const toast = useToastStore.getState();
+    try {
+      // Draftline refuses to restore over any unsaved work; check first so editors and tabs stay put.
+      await flushEditorWrites();
+      await get().checkDirty();
+      if (get().isDirty) {
+        toast.show("Save or set aside your current changes first, then restore these.", 6000, "warning");
+        return;
+      }
+      let outcome = "missing" as Awaited<ReturnType<typeof restoreSetAsideShelf>>;
+      await rewriteWorkspaceFiles(async () => {
+        outcome = await restoreSetAsideShelf(shelfId);
+      }, "Restore failed");
+      await get().checkStash();
+      if (outcome === "restored") toast.show("Set-aside changes restored.", 3000, "success");
+      else if (outcome === "conflict") toast.show("Save or set aside your current changes first, then restore these.", 6000, "warning");
+    } finally {
+      set({ setAsideBusy: false });
+    }
+  },
+
+  dropStash: async (shelfId) => {
+    if (get().setAsideBusy) return;
+    set({ setAsideBusy: true });
+    try {
+      await deleteSetAsideShelf(shelfId);
+    } catch (err) {
+      console.error("Failed to delete set-aside changes:", err);
+      useToastStore.getState().show(`Delete failed: ${errorMessage(err)}`, 5000, "error");
+    } finally {
+      await get().checkStash();
+      set({ setAsideBusy: false });
+    }
   },
 
   checkStash: async () => {
     const generation = currentWorkspaceGeneration();
     try {
-      const hasStash = await hasDraftlineShelf();
+      const setAsideShelves = await listSetAsideShelves();
       if (generation !== currentWorkspaceGeneration()) return;
-      set({ hasStash });
+      set({ setAsideShelves });
     } catch (err) {
       console.error("Failed to check stash:", err);
     }

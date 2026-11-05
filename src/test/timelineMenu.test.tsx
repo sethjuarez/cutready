@@ -33,7 +33,7 @@ const timeline = (name: string, active = false): TimelineInfo =>
 
 function setup(isDirty: boolean) {
   const switchTimeline = vi.fn(() => Promise.resolve());
-  const stashChanges = vi.fn(() => Promise.resolve(true));
+  const stashChanges = vi.fn((_name?: string) => Promise.resolve(true));
   const saveVersion = vi.fn(() => Promise.resolve());
   act(() => {
     useSyncStore.setState({ currentRemote: null });
@@ -41,7 +41,7 @@ function setup(isDirty: boolean) {
       timelines: [timeline("main", true), timeline("alt")],
       graphNodes: [],
       isDirty,
-      hasStash: false,
+      setAsideShelves: [],
       startedBranchFromSnapshot: null,
       switchTimeline,
       stashChanges,
@@ -107,12 +107,13 @@ describe("TimelineMenu", () => {
     expect(screen.queryByTestId("pre-action-dialog")).toBeNull();
   });
 
-  it("hides Set aside while another set-aside shelf is waiting", async () => {
-    setup(true);
-    act(() => useVersioningStore.setState({ hasStash: true }));
+  it("sets aside again while other set-aside work is waiting, named for the switch", async () => {
+    const { switchTimeline, stashChanges } = setup(true);
+    act(() => useVersioningStore.setState({ setAsideShelves: [{ id: "cutready-stash", name: "Set-aside changes", timeMs: 0 }] }));
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Switch to timeline alt" })));
-    expect(screen.getByTestId("pre-action-dialog")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Set aside & continue" })).toBeNull();
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Set aside & continue" })));
+    expect(stashChanges).toHaveBeenCalledWith(expect.stringMatching(/^Before .*alt/));
+    expect(switchTimeline).toHaveBeenCalledWith("alt");
   });
 
   it("doesn't switch until open edits are written", async () => {

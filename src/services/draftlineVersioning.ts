@@ -613,33 +613,6 @@ export async function saveDraftlineVersion(label: string): Promise<string> {
   return version.version.id;
 }
 
-const CUTREADY_STASH_SHELF = "cutready-stash";
-
-export async function shelveDraftlineChanges(): Promise<void> {
-  const f = facade();
-  const changes = await f.changes();
-  if (changes.files.length === 0) return;
-  await f.selectedShelve(changes.files.map((file) => file.path), CUTREADY_STASH_SHELF);
-}
-
-export async function hasDraftlineShelf(): Promise<boolean> {
-  const shelves = await facade().shelves();
-  return shelves.some((shelf) => shelf.id === CUTREADY_STASH_SHELF);
-}
-
-export async function popDraftlineShelf(): Promise<boolean> {
-  const workspacePath = requireWorkspacePath();
-  const f = facade();
-  const shelves = await f.shelves();
-  const shelf = shelves.find((candidate) => candidate.id === CUTREADY_STASH_SHELF);
-  if (!shelf) return false;
-  await f.applyShelf(shelf.id);
-  await invoke("delete_shelf", {
-    request: { workspace_path: workspacePath, shelf_id: shelf.id },
-  });
-  return true;
-}
-
 function refsByTargetVersion(refs: WorkspaceGraphRef[]): Map<string, WorkspaceGraphRef[]> {
   const byVersion = new Map<string, WorkspaceGraphRef[]>();
   for (const ref of refs) {

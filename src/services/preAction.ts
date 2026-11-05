@@ -1,4 +1,4 @@
-import { preActionDecision } from "../domain/versioning";
+import { preActionDecision, setAsideNameFor } from "../domain/versioning";
 import { usePreActionStore, type PreActionRequest } from "../stores/preActionStore";
 import { useVersioningStore } from "../stores/versioningStore";
 import { isSaveBlocked, runVersionOperation } from "./versionOperation";
@@ -10,10 +10,10 @@ import { isSaveBlocked, runVersionOperation } from "./versionOperation";
  */
 export function requestPreAction(request: PreActionRequest): Promise<void> {
   return runVersionOperation(request.operation, async (summary) => {
-    const { isDirty, hasStash } = useVersioningStore.getState();
-    const decision = preActionDecision({ changedDocuments: summary.documents.length, isDirty, hasStash });
+    const { isDirty } = useVersioningStore.getState();
+    const decision = preActionDecision({ changedDocuments: summary.documents.length, isDirty });
     if (decision.kind === "ask") {
-      usePreActionStore.getState().ask({ ...request, changeCount: decision.changeCount, canSetAside: decision.canSetAside });
+      usePreActionStore.getState().ask({ ...request, changeCount: decision.changeCount });
       return;
     }
     await request.run();
@@ -37,6 +37,6 @@ export type SetAsideResult = { shelved: false } | { shelved: true; followUp?: ()
 /** "Set aside & continue", first half: shelve the work. The caller then runs the action. */
 export async function setAsideFor(request: PreActionRequest): Promise<SetAsideResult> {
   const followUp = request.onSetAside?.() ?? undefined;
-  const shelved = await runVersionOperation("Set aside", () => useVersioningStore.getState().stashChanges());
+  const shelved = await runVersionOperation("Set aside", () => useVersioningStore.getState().stashChanges(setAsideNameFor(request.target)));
   return shelved ? { shelved: true, followUp } : { shelved: false };
 }
