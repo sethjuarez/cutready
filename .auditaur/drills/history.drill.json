@@ -696,6 +696,155 @@
       ]
     },
     {
+      "name": "saves unsaved work as a version before restoring the project",
+      "steps": [
+        {
+          "click": {
+            "testId": "explorer-item-plan.md"
+          }
+        },
+        {
+          "click": {
+            "label": "Note content"
+          }
+        },
+        {
+          "press": "Control+End",
+          "target": {
+            "label": "Note content"
+          }
+        },
+        {
+          "type": {
+            "label": "Note content"
+          },
+          "value": "Thank everyone."
+        },
+        {
+          "expectIpc": "update_note",
+          "status": "ok"
+        },
+        {
+          "click": {
+            "testId": "titlebar-sync-status"
+          }
+        },
+        {
+          "click": {
+            "testId": "open-history"
+          },
+          "timeoutMs": 15000
+        },
+        {
+          "expect": {
+            "testId": "history-entry",
+            "nth": 0
+          },
+          "toContainText": "Script polished",
+          "timeoutMs": 30000
+        },
+        {
+          "click": {
+            "testId": "history-entry-menu",
+            "nth": 1
+          }
+        },
+        {
+          "click": {
+            "role": "menuitem",
+            "name": "Restore project",
+            "exact": true
+          }
+        },
+        {
+          "click": {
+            "testId": "restore-confirm"
+          },
+          "timeoutMs": 15000
+        },
+        {
+          "expect": {
+            "testId": "pre-action-dialog"
+          },
+          "toBeVisible": true,
+          "timeoutMs": 15000
+        },
+        {
+          "fill": {
+            "testId": "version-name-input"
+          },
+          "value": "Thanks added"
+        },
+        {
+          "click": {
+            "role": "button",
+            "name": "Save version & continue",
+            "exact": true
+          }
+        },
+        {
+          "expectIpc": "restore_version_as_new_save",
+          "status": "ok",
+          "timeoutMs": 30000
+        },
+        {
+          "name": "the restore is the newest save",
+          "run": "git",
+          "cwd": "${CUTREADY_PROJECT}",
+          "args": [
+            "log",
+            "-1",
+            "--format=%s"
+          ],
+          "stdout": "Restore Outline drafted"
+        },
+        {
+          "name": "on top of the saved work",
+          "run": "git",
+          "cwd": "${CUTREADY_PROJECT}",
+          "args": [
+            "log",
+            "-1",
+            "--skip=1",
+            "--format=%s"
+          ],
+          "stdout": "Thanks added"
+        },
+        {
+          "name": "which kept the edit",
+          "run": "git",
+          "cwd": "${CUTREADY_PROJECT}",
+          "args": [
+            "grep",
+            "-q",
+            "Thank everyone.",
+            "HEAD~1",
+            "--",
+            "plan.md"
+          ]
+        },
+        {
+          "name": "the workspace has the restored note",
+          "run": "node",
+          "args": [
+            "scripts/auditaur-drill-fixture.mjs",
+            "expect-file",
+            "plan.md",
+            "lacks:Thank everyone."
+          ]
+        },
+        {
+          "expect": {
+            "testId": "history-tab"
+          },
+          "toBeVisible": true
+        },
+        {
+          "expectNoErrors": true
+        }
+      ]
+    },
+    {
       "name": "restores one document, then explains there is nothing left to restore",
       "steps": [
         {
