@@ -1,4 +1,4 @@
-//! Read-only history commands: graph, per-document history, diffs and file previews.
+//! Read-only history commands: graph, per-document history, diffs, file previews and version file bytes.
 
 use draftline::tauri_contract as contract;
 use draftline::{PreviewFile, VersionDiff};
@@ -65,6 +65,19 @@ pub async fn preview_workspace_file(
 ) -> contract::TauriCommandResult<Option<draftline::CurrentFilePreview>> {
     let context = context_for_workspace(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::preview_workspace_file_with_context(
+        &context, request,
+    ))
+}
+
+/// A version's copy of one file as base64, capped at `max_bytes` (Draftline
+/// defaults to 20 MiB) so images can be compared without writing them out.
+#[auditaur_command(skip_all)]
+pub async fn read_version_file_bytes(
+    request: contract::ReadVersionFileBytesRequest,
+    app: AppHandle,
+) -> contract::TauriCommandResult<Option<contract::VersionFileBytes>> {
+    let context = context_for_workspace(&request.workspace_path, app)?;
+    contract::into_tauri_result(contract::read_version_file_bytes_with_context(
         &context, request,
     ))
 }

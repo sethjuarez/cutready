@@ -198,6 +198,7 @@
     "push_pending_chat_message",
     "read_narration_asset",
     "read_project_image",
+    "read_version_file_bytes",
     "remote_variation_diagnostics",
     "remove_recent_project",
     "remove_sketch_from_storyboard",

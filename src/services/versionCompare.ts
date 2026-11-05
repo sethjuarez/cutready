@@ -1,8 +1,10 @@
 import type { ChangeKind, ChangedFile } from "@draftline/client";
 import { compareFile, type FileComparison } from "../domain/compare/compareFile";
 import { WORKSPACE } from "../domain/compare/compareTarget";
+import { versionImage } from "../domain/compare/imageData";
 import type { FileStatus } from "../domain/changes";
 import { fetchProjectImageDataUrl } from "../utils/projectImage";
+import { fileTooLargeMessage } from "./draftlineErrors";
 import { facade } from "./draftlineVersioning";
 
 const STATUS: Record<ChangeKind, FileStatus> = {
@@ -41,10 +43,12 @@ export async function listComparedFiles(from: string, to: string, paths: readonl
     .map((file: ChangedFile) => ({ path: file.path, status: STATUS[file.kind] ?? "modified", isBinary: file.is_binary }));
 }
 
-async function readText(side: string, path: string) {
-  const f = facade();
+/** One workspace's facade, captured once so a project switch mid-load can't mix data. */
+type Facade = ReturnType<typeof facade>;
+
+async function readText(f: Facade, side: string, path: string) {
   const file = side === WORKSPACE ? await f.previewWorkspaceFile(path) : await f.previewVersionFile(side, path);
-  return file ? { content: file.content ?? null, isBinary: file.is_binary } : null;
+  return file ? { path, content: file.content ?? null, isBinary: file.is_binary } : null;
 }
 
 export interface CompareImageReader {
@@ -52,18 +56,30 @@ export interface CompareImageReader {
   workspaceImage: (path: string) => Promise<string | null>;
 }
 
-async function imageSide(side: string, file: ComparedFile, present: boolean, reader: CompareImageReader): Promise<ImageSide> {
+const NO_VERSION_PREVIEW = "Preview not available for this version";
+
+/** A version's copy of an image; a denied or missing file and an over-cap one fall back to a message. */
+async function versionImageSide(f: Facade, version: string, path: string): Promise<ImageSide> {
+  try {
+    const bytes = await f.readVersionFileBytes(version, path);
+    return bytes ? versionImage(path, bytes.data_base64) : { state: "unavailable", reason: NO_VERSION_PREVIEW };
+  } catch (err) {
+    return { state: "unavailable", reason: fileTooLargeMessage(err) ?? NO_VERSION_PREVIEW };
+  }
+}
+
+async function imageSide(f: Facade, side: string, path: string, present: boolean, reader: CompareImageReader): Promise<ImageSide> {
   if (!present) return { state: "absent" };
-  if (side !== WORKSPACE) return { state: "unavailable", reason: "Preview not available for this version" };
-  const src = await reader.workspaceImage(file.path).catch(() => null);
+  if (side !== WORKSPACE) return versionImageSide(f, side, path);
+  const src = await reader.workspaceImage(path).catch(() => null);
   return src ? { state: "ready", src } : { state: "unavailable", reason: "Couldn't load this image" };
 }
 
 /** A renamed file's older side lives at a previous path; Draftline diffs only name the new one. */
-async function readRenamedBefore(from: string, file: ComparedFile, aliases: readonly string[]) {
+async function readRenamedBefore(f: Facade, from: string, file: ComparedFile, aliases: readonly string[]) {
   for (const alias of aliases) {
     if (alias === file.path) continue;
-    const found = await readText(from, alias);
+    const found = await readText(f, from, alias);
     if (found) return found;
   }
   return null;
@@ -83,11 +99,12 @@ export async function loadFileComparison(
   reader: CompareImageReader,
   aliases: readonly string[] = [],
 ): Promise<LoadedComparison> {
+  const f = facade();
   const beforePresent = file.status !== "added";
   const afterPresent = file.status !== "deleted";
   const [before, after] = await Promise.all([
-    !beforePresent ? null : file.status === "renamed" ? readRenamedBefore(from, file, aliases) : readText(from, file.path),
-    afterPresent ? readText(to, file.path) : null,
+    !beforePresent ? null : file.status === "renamed" ? readRenamedBefore(f, from, file, aliases) : readText(f, from, file.path),
+    afterPresent ? readText(f, to, file.path) : null,
   ]);
   if (file.status === "renamed" && !before) return { view: "unavailable", reason: RENAMED };
   const comparison = compareFile({
@@ -98,8 +115,8 @@ export async function loadFileComparison(
   });
   if (comparison.view !== "media") return comparison;
   const [beforeImage, afterImage] = await Promise.all([
-    imageSide(from, file, beforePresent, reader),
-    imageSide(to, file, afterPresent, reader),
+    imageSide(f, from, before?.path ?? file.path, beforePresent, reader),
+    imageSide(f, to, file.path, afterPresent, reader),
   ]);
   return { view: "media", before: beforeImage, after: afterImage };
 }

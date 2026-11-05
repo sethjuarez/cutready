@@ -5,9 +5,10 @@ const diffVersions = vi.fn();
 const diffVersionToWorkspace = vi.fn();
 const previewVersionFile = vi.fn();
 const previewWorkspaceFile = vi.fn();
+const readVersionFileBytes = vi.fn();
 vi.mock("../services/draftlineVersioning", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../services/draftlineVersioning")>()),
-  facade: () => ({ diffVersions, diffVersionToWorkspace, previewVersionFile, previewWorkspaceFile }),
+  facade: () => ({ diffVersions, diffVersionToWorkspace, previewVersionFile, previewWorkspaceFile, readVersionFileBytes }),
 }));
 const fetchProjectImageDataUrl = vi.fn();
 vi.mock("../utils/projectImage", () => ({ fetchProjectImageDataUrl: (path: string) => fetchProjectImageDataUrl(path) }));
@@ -63,7 +64,7 @@ describe("compareFile", () => {
 
 describe("versionCompare service", () => {
   beforeEach(() => {
-    for (const fn of [diffVersions, diffVersionToWorkspace, previewVersionFile, previewWorkspaceFile, fetchProjectImageDataUrl]) fn.mockReset();
+    for (const fn of [diffVersions, diffVersionToWorkspace, previewVersionFile, previewWorkspaceFile, readVersionFileBytes, fetchProjectImageDataUrl]) fn.mockReset();
   });
 
   it("diffs against the workspace or another version, filtered by path", async () => {
@@ -98,6 +99,21 @@ describe("versionCompare service", () => {
     expect((await loadFileComparison("v1", "v2", renamed, noImages)).view).toBe("unavailable");
   });
 
+  it("falls back for a version image that's missing, too large or an LFS pointer", async () => {
+    previewVersionFile.mockResolvedValue({ path: "s.png", is_binary: true });
+    const file = { path: "s.png", status: "modified", isBinary: true } as const;
+    const before = async () => {
+      const result = await loadFileComparison("v1", "v2", file, noImages);
+      return result.view === "media" ? result.before : null;
+    };
+    readVersionFileBytes.mockResolvedValue(null);
+    expect(await before()).toEqual({ state: "unavailable", reason: "Preview not available for this version" });
+    readVersionFileBytes.mockRejectedValue({ code: "file_too_large", message: "raw", details: { path: "s.png", size: 31457280, max_bytes: 20971520 } });
+    expect(await before()).toEqual({ state: "unavailable", reason: "This version of the file is too large to preview (30.0 MB)." });
+    readVersionFileBytes.mockResolvedValue({ path: "s.png", size: 40, data_base64: btoa("version https://git-lfs.github.com/spec/v1\n") });
+    expect(await before()).toEqual({ state: "unavailable", reason: "Stored with Git LFS, so there's no preview of this version" });
+  });
+
   it("doesn't read the missing side of an added file", async () => {
     previewVersionFile.mockResolvedValue({ path: "a.md", content: "New", is_binary: false });
     const result = await loadFileComparison("v1", "v2", { path: "a.md", status: "added", isBinary: false }, noImages);
@@ -106,14 +122,16 @@ describe("versionCompare service", () => {
     expect(result.view === "note" && result.comparison.blocks).toEqual([{ status: "added", text: "New" }]);
   });
 
-  it("shows the workspace image and falls back for a version's image", async () => {
+  it("shows the version's image from its bytes and the workspace image", async () => {
     previewVersionFile.mockResolvedValue({ path: "s.png", is_binary: true });
     previewWorkspaceFile.mockResolvedValue({ path: "s.png", is_binary: true });
+    readVersionFileBytes.mockResolvedValue({ path: "s.png", size: 3, data_base64: "iVBORw0KGgoAAA" });
     const reader: CompareImageReader = { workspaceImage: async (path) => `data:image/png;base64,${path}` };
     const result = await loadFileComparison("v1", WORKSPACE, { path: "s.png", status: "modified", isBinary: true }, reader);
+    expect(readVersionFileBytes).toHaveBeenCalledWith("v1", "s.png");
     expect(result).toEqual({
       view: "media",
-      before: { state: "unavailable", reason: "Preview not available for this version" },
+      before: { state: "ready", src: "data:image/png;base64,iVBORw0KGgoAAA" },
       after: { state: "ready", src: "data:image/png;base64,s.png" },
     });
     const added = await loadFileComparison("v1", WORKSPACE, { path: "s.png", status: "added", isBinary: true }, reader);
