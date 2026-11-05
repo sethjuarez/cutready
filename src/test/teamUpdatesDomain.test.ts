@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   incomingAuthors,
   isTeamUpdatesName,
+  plainVersion,
   syncCopy,
   teammates,
   teamUpdatesLabel,
@@ -50,5 +51,34 @@ describe("sync copy", () => {
     expect(syncCopy.gotTeamUpdates(0)).toBe("Got the team's updates.");
     expect(syncCopy.conflictTitle(["Dana"], ["cutready/compass.sk"])).toBe("You and Dana both changed compass.sk");
     expect(syncCopy.conflictTitle([], ["a.sk", "b.md"])).toBe("You and a teammate both changed 2 files");
+  });
+});
+
+describe("plainVersion", () => {
+  it("renames generated update versions and summarizes what came in", () => {
+    expect(plainVersion("Brought in team updates", "- Hero (Dana)\n- Intro (Lee)", true)).toEqual({
+      name: "Brought in team updates",
+      comment: "Hero (Dana) and 1 more",
+      teamUpdates: ["Hero (Dana)", "Intro (Lee)"],
+    });
+  });
+
+  it("recognizes a commit-template prefix", () => {
+    expect(plainVersion("[CutReady] Brought in team updates", "- Hero (Dana)", true).name).toBe("Brought in team updates");
+    expect(plainVersion("cutready: Merge updates from main", null, true).name).toBe("Brought in team updates");
+  });
+
+  it("keeps a legacy merge's comment instead of reading it as a list", () => {
+    expect(plainVersion("Merge updates from main", "- my own note", true)).toEqual({
+      name: "Brought in team updates",
+      comment: "- my own note",
+      teamUpdates: [],
+    });
+  });
+
+  it("leaves ordinary saves alone, even with a generated-looking name", () => {
+    expect(plainVersion("Merge updates from main", "typed", false)).toEqual({ name: "Merge updates from main", comment: "typed", teamUpdates: [] });
+    expect(plainVersion("initial outline\nmore", "first pass", true).name).toBe("initial outline");
+    expect(plainVersion("Plan: Brought in team updates later", null, true).name).toBe("Plan: Brought in team updates later");
   });
 });

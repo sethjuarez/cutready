@@ -1,4 +1,5 @@
 import type { ChangeKind, PathHistory, WorkspaceGraph, WorkspaceGraphNode } from "@draftline/client";
+import { isTeamUpdatesName, plainVersion } from "../versioning/teamUpdates";
 
 /** One version in the History tab's timeline. */
 export interface TimelineEntry {
@@ -16,6 +17,8 @@ export interface TimelineEntry {
   sent: boolean | null;
   /** In a per-document timeline, how this version changed the document. */
   pathChange?: ChangeKind;
+  /** For a version that brought in the team's saves: what came in, one line each. */
+  teamUpdates?: string[];
 }
 
 export function firstLine(text: string | null | undefined): string | null {
@@ -23,8 +26,23 @@ export function firstLine(text: string | null | undefined): string | null {
   return line || null;
 }
 
-function toEntry(node: WorkspaceGraphNode, remote: boolean): TimelineEntry {
+/**
+ * Generated merge names ("Merge updates from main") read as plain words:
+ * "Brought in team updates", with what came in as the comment.
+ */
+function plainNames(entry: TimelineEntry, rawComment: string | null | undefined): TimelineEntry {
+  const plain = plainVersion(entry.name, rawComment, entry.isMerge);
+  if (!entry.isMerge || !isTeamUpdatesName(entry.name)) return entry;
   return {
+    ...entry,
+    name: plain.name,
+    comment: firstLine(plain.comment),
+    ...(plain.teamUpdates.length > 0 ? { teamUpdates: plain.teamUpdates } : {}),
+  };
+}
+
+function toEntry(node: WorkspaceGraphNode, remote: boolean): TimelineEntry {
+  return plainNames({
     id: node.version.id,
     name: node.version.label,
     comment: firstLine(node.version.comment),
@@ -34,7 +52,7 @@ function toEntry(node: WorkspaceGraphNode, remote: boolean): TimelineEntry {
     isMerge: node.is_merge,
     isCurrent: node.is_current || node.is_head,
     sent: remote ? node.reachable_from_remote_variation === true : null,
-  };
+  }, node.version.comment);
 }
 
 /** Entries whose name, comment or author contains every word of the query. */
@@ -42,7 +60,7 @@ export function searchTimeline(entries: TimelineEntry[], query: string): Timelin
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   if (words.length === 0) return entries;
   return entries.filter((entry) => {
-    const text = `${entry.name} ${entry.comment ?? ""} ${entry.author}`.toLowerCase();
+    const text = `${entry.name} ${entry.comment ?? ""} ${entry.teamUpdates?.join(" ") ?? ""} ${entry.author}`.toLowerCase();
     return words.every((word) => text.includes(word));
   });
 }
@@ -76,7 +94,7 @@ export function pathTimeline(history: PathHistory, graph: WorkspaceGraph | null,
     const pathChange = files.find((file) => paths.has(file.path))?.kind;
     const node = nodes.get(entry.version.id);
     if (node) return { ...toEntry(node, remote), pathChange };
-    return {
+    return plainNames({
       pathChange,
       id: entry.version.id,
       name: entry.version.label,
@@ -87,6 +105,6 @@ export function pathTimeline(history: PathHistory, graph: WorkspaceGraph | null,
       isMerge: entry.parent_ids.length > 1,
       isCurrent: graph?.current_version === entry.version.id || entry.is_head,
       sent: null,
-    };
+    }, entry.version.comment);
   });
 }

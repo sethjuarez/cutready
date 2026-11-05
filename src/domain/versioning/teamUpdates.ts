@@ -29,14 +29,70 @@ export function teamUpdatesLabel(incoming: readonly IncomingVersion[]): string {
   return listed.length > 0 ? `${TEAM_UPDATES_NAME}\n\n${listed.join("\n")}` : TEAM_UPDATES_NAME;
 }
 
+// A repository's commit template may put a short prefix ("[CutReady] ") before the name.
+const GENERATED_NAME = /^(?:.{0,40}?[\s\]:)>-])?\s*(Brought in team updates|Merge updates(?: from \S+)?)$/;
+
 /**
- * Whether a version name was generated for bringing in other people's work,
- * rather than typed by someone: the current name or the older prefilled
- * "Merge updates from …" names.
+ * Which kind of generated name a version has, if any: the current
+ * "Brought in team updates" (whose comment lists what came in) or an older
+ * prefilled "Merge updates from …" (whose comment the person may have typed).
  */
+export function teamUpdatesNameKind(name: string): "current" | "legacy" | null {
+  const match = GENERATED_NAME.exec(name.split(/\r?\n/, 1)[0].trim());
+  if (!match) return null;
+  return match[1] === TEAM_UPDATES_NAME ? "current" : "legacy";
+}
+
+/** Whether a version name was generated for bringing in other people's work rather than typed by someone. */
 export function isTeamUpdatesName(name: string): boolean {
-  const first = name.split(/\r?\n/, 1)[0].trim();
-  return first === TEAM_UPDATES_NAME || /^Merge updates( from .+)?$/.test(first);
+  return teamUpdatesNameKind(name) !== null;
+}
+
+/**
+ * What a team-update version brought in, read back from its comment's list:
+ * the listed lines plus how many more were left off.
+ */
+export function teamUpdatesFromComment(comment: string | null | undefined): { lines: string[]; more: number } {
+  const lines: string[] = [];
+  let more = 0;
+  for (const raw of comment?.split(/\r?\n/) ?? []) {
+    const line = raw.trim();
+    if (!line.startsWith("- ")) continue;
+    const extra = /^- …and (\d+) more$/.exec(line);
+    if (extra) more += Number(extra[1]);
+    else lines.push(line.slice(2).trim());
+  }
+  return { lines, more };
+}
+
+/** One-line summary for a history row: "#24 lead queue (Dana) and 2 more". */
+export function teamUpdatesSummary(comment: string | null | undefined): string | null {
+  const { lines, more } = teamUpdatesFromComment(comment);
+  if (lines.length === 0) return null;
+  const rest = lines.length - 1 + more;
+  return rest > 0 ? `${lines[0]} and ${rest} more` : lines[0];
+}
+
+/**
+ * A version's name, comment and incoming list as people should read them.
+ * Only versions that combined two lines of work (`isMerge`) with a generated
+ * name are renamed; a legacy name keeps whatever comment it has.
+ */
+export function plainVersion(
+  message: string,
+  comment: string | null | undefined,
+  isMerge: boolean,
+): { name: string; comment: string; teamUpdates: string[] } {
+  const name = message.split(/\r?\n/, 1)[0].trim();
+  const kind = isMerge ? teamUpdatesNameKind(name) : null;
+  if (kind === null) return { name, comment: comment ?? "", teamUpdates: [] };
+  if (kind === "legacy") return { name: TEAM_UPDATES_NAME, comment: comment ?? "", teamUpdates: [] };
+  const { lines, more } = teamUpdatesFromComment(comment);
+  return {
+    name: TEAM_UPDATES_NAME,
+    comment: teamUpdatesSummary(comment) ?? "",
+    teamUpdates: more > 0 ? [...lines, `…and ${more} more`] : lines,
+  };
 }
 
 /** Distinct, non-empty authors of the incoming saves, in order. */

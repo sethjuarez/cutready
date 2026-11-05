@@ -65,8 +65,16 @@ function TimelineEntryRow({ entry, onPreview, onMenu, path }: {
           <span className="shrink-0 text-xs text-[rgb(var(--color-text-secondary))]">{entryTime(entry)}</span>
         </span>
         {entry.comment && (
-          <span className="block truncate text-xs text-[rgb(var(--color-text-secondary))]" data-testid="history-entry-comment">{entry.comment}</span>
+          <span
+            className="block truncate text-xs text-[rgb(var(--color-text-secondary))]"
+            data-testid="history-entry-comment"
+            title={entry.teamUpdates?.join("\n")}
+            aria-hidden={entry.teamUpdates ? true : undefined}
+          >
+            {entry.comment}
+          </span>
         )}
+        {entry.teamUpdates && <span className="sr-only">{`Brought in: ${entry.teamUpdates.join("; ")}`}</span>}
         <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[rgb(var(--color-text-secondary))]">
           <span>{entry.author}</span>
           <SentMarker sent={entry.sent} />
