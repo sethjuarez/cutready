@@ -5,6 +5,7 @@ import { isSaveBlocked, runVersionOperation } from "../../services/versionOperat
 import { useAppStore } from "../../stores/appStore";
 import { useChangeSummaryStore } from "../../stores/changeSummaryStore";
 import { useSyncStore } from "../../stores/syncStore";
+import { useSavesToSend } from "../../hooks/useSavesToSend";
 import { VersionForm } from "./VersionForm";
 
 /** Send, gated: "Up to date" when there's nothing new, and a version first when there are unsaved changes. */
@@ -12,6 +13,7 @@ export function SendSection({ showComment = true }: { showComment?: boolean }) {
   const currentRemote = useSyncStore((s) => s.currentRemote);
   const syncStatus = useSyncStore((s) => s.syncStatus);
   const isSyncing = useSyncStore((s) => s.isSyncing);
+  const saves = useSavesToSend();
   const syncWithRemote = useSyncStore((s) => s.syncWithRemote);
   const changedCount = useChangeSummaryStore((s) => s.summary?.documents.length ?? 0);
   const isHybrid = useAppStore((s) => s.currentProject?.hybrid === true);
@@ -19,7 +21,7 @@ export function SendSection({ showComment = true }: { showComment?: boolean }) {
 
   if (!currentRemote) return null;
 
-  const gate = sendGate({ hasRemote: true, isSyncing, status: syncStatus, changedCount });
+  const gate = sendGate({ hasRemote: true, isSyncing, status: syncStatus && { ...syncStatus, ahead: saves }, changedCount });
   const sendLabel = isHybrid ? "Send for review" : "Send";
   const label = sendGateLabel(gate, sendLabel, syncStatus?.behind ?? 0);
 

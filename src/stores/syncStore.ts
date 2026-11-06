@@ -15,8 +15,7 @@ import {
 } from "../services/draftlineVersioning";
 import { baseRenamedBranches } from "../services/draftlineErrors";
 import { bringInTeamUpdates, type TeamUpdateOutcome } from "../services/teamUpdates";
-import { incomingAuthors, syncCopy } from "../domain/versioning";
-import { firstParentTimelineNodes } from "../utils/timelineNodes";
+import { incomingAuthors, reviewRequest, syncCopy } from "../domain/versioning";
 import { useToastStore } from "./toastStore";
 import { useAppStore } from "./appStore";
 import { useVersioningStore } from "./versioningStore";
@@ -222,12 +221,11 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
     if (project?.hybrid) {
       // Hybrid projects send for review (branch + pull request) instead of
       // pushing directly; ask for the pull request title first.
-      set({
-        sendForReviewPrompt: {
-          defaultTitle: versioning().versions[0]?.message?.trim() || `Update ${project.name}`,
-          defaultBody: versioning().versions[0]?.comment ?? "",
-        },
-      });
+      const { graphNodes, versions } = versioning();
+      // Before history loads, the newest save is the best guess for a name.
+      const loose = graphNodes.length === 0 && versions[0] ? { name: versions[0].message, comment: versions[0].comment ?? "" } : undefined;
+      const review = reviewRequest(graphNodes, get().syncStatus?.ahead ?? Infinity, loose, `Update ${project.name}`);
+      set({ sendForReviewPrompt: { defaultTitle: review.title, defaultBody: review.body } });
       return false;
     }
     set({ isSyncing: true, syncError: null, baseRename: null });
@@ -353,8 +351,8 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
       return;
     }
     if (app().currentProject?.hybrid) {
-      const latest = version ?? latestSave();
-      await get().sendForReview(latest.name, latest.comment || undefined, pickedUp);
+      const review = reviewRequest(versioning().graphNodes, status.ahead, version);
+      await get().sendForReview(review.title, review.body || undefined, pickedUp);
       return;
     }
     const sent = await get().pushToRemote();
@@ -587,12 +585,6 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
     }
   },
 }));
-
-/** The newest save on this timeline: Send reuses its name and comment. */
-export function latestSave(): { name: string; comment: string } {
-  const [head] = firstParentTimelineNodes(versioning().graphNodes);
-  return { name: head?.message.split(/\r?\n/, 1)[0] || "CutReady changes", comment: head?.comment ?? "" };
-}
 
 /** Toasts the outcome; returns the message to keep on screen when nothing came in. */
 function announceTeamUpdates(outcome: TeamUpdateOutcome, quiet: boolean): string | null {

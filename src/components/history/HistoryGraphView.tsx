@@ -8,6 +8,7 @@ import {
 } from "@draftline/react";
 import { Handle, Position } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { plainVersion } from "../../domain/versioning";
 import "./historyGraph.css";
 
 const NODE_WIDTH = 220;
@@ -27,7 +28,9 @@ function GraphNodeCard({ node, onSelect }: { node: DraftlineWorkspaceGraphNode; 
     >
       {/* Draftline's node view renders no handles, so edges anchor to these. */}
       <Handle type="target" position={Position.Top} isConnectable={false} />
-      <span className="history-graph-card-name">{node.data.label}</span>
+      <span className="history-graph-card-name">
+        {plainVersion(node.data.label, graphNode.version.comment, graphNode.is_merge).name}
+      </span>
       <span className="history-graph-card-meta">
         {graphNode.version.author.name}
         {node.data.refs.length > 0 && <> · {node.data.refs.join(", ")}</>}

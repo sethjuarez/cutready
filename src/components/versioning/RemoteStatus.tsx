@@ -7,6 +7,7 @@ import { isContributorIdentityRequired } from "../../services/identity";
 import { startGetUpdates } from "../../services/preAction";
 import { useAppStore } from "../../stores/appStore";
 import { useSyncStore } from "../../stores/syncStore";
+import { useSavesToSend } from "../../hooks/useSavesToSend";
 import { IncomingPreview } from "./IncomingPreview";
 
 const linkButtonClass =
@@ -24,6 +25,7 @@ export function RemoteStatus() {
   const pullFromRemote = useSyncStore((s) => s.pullFromRemote);
   const getUpdatesFromBase = useSyncStore((s) => s.getUpdatesFromBase);
   const isHybrid = useAppStore((s) => s.currentProject?.hybrid === true);
+  const ahead = useSavesToSend();
   const [showIncoming, setShowIncoming] = useState(false);
 
   if (!currentRemote) {
@@ -36,7 +38,6 @@ export function RemoteStatus() {
   }
 
   const behind = syncStatus?.behind ?? 0;
-  const ahead = syncStatus?.ahead ?? 0;
   const baseBehind = isHybrid && baseStatus ? baseStatus.behind : 0;
   const error = syncError
     ? classifySyncError(syncError, { isIdentityRequired: isContributorIdentityRequired, isGuidance: isDraftlineGuidanceMessage })

@@ -1124,6 +1124,10 @@ fn redact_remote_url_credentials(url: &str) -> String {
 }
 
 #[cfg(test)]
+#[path = "draftline_review_tests.rs"]
+mod review_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -1266,7 +1270,7 @@ mod tests {
         assert_eq!(profile.saved_by.name, "CutReady");
     }
 
-    fn init_bare_remote(path: &Path) {
+    pub(super) fn init_bare_remote(path: &Path) {
         let output = git_command()
             .args(["init", "--bare", "--initial-branch=main"])
             .arg(path)
@@ -1296,14 +1300,14 @@ mod tests {
         String::from_utf8_lossy(&output.stdout).trim().to_string()
     }
 
-    fn remote_request(root: &Path) -> contract::RemoteRequest {
+    pub(super) fn remote_request(root: &Path) -> contract::RemoteRequest {
         contract::RemoteRequest {
             workspace_path: root.to_path_buf(),
             remote: "origin".to_string(),
         }
     }
 
-    fn context(root: &Path) -> contract::DraftlineCommandContext<'static> {
+    pub(super) fn context(root: &Path) -> contract::DraftlineCommandContext<'static> {
         let name = root.file_name().unwrap().to_string_lossy().to_string();
         let contributor = Contributor {
             email: Some(format!("{name}@collab.test")),
@@ -1322,7 +1326,7 @@ mod tests {
         .unwrap()
     }
 
-    fn save(root: &Path, label: &str) {
+    pub(super) fn save(root: &Path, label: &str) {
         contract::save_with_context(
             &mut context(root),
             contract::SaveRequest {
@@ -1344,7 +1348,7 @@ mod tests {
         .unwrap_or_else(|error| panic!("publish {}: {error}", root.display()));
     }
 
-    fn fetch(root: &Path) {
+    pub(super) fn fetch(root: &Path) {
         contract::fetch_remote_with_context(&mut context(root), remote_request(root))
             .unwrap_or_else(|error| panic!("fetch {}: {error}", root.display()));
     }
@@ -1527,8 +1531,8 @@ mod tests {
     }
 
     #[derive(Default)]
-    struct FakeHost {
-        requests: std::sync::Arc<std::sync::Mutex<Vec<draftline::PullRequestRequest>>>,
+    pub(super) struct FakeHost {
+        pub(super) requests: std::sync::Arc<std::sync::Mutex<Vec<draftline::PullRequestRequest>>>,
     }
 
     impl PullRequestProvider for FakeHost {
@@ -1551,7 +1555,7 @@ mod tests {
         }
     }
 
-    fn send_request(root: &Path, title: &str) -> SendForReviewRequest {
+    pub(super) fn send_request(root: &Path, title: &str) -> SendForReviewRequest {
         SendForReviewRequest {
             workspace_path: root.to_path_buf(),
             remote: "origin".to_string(),
@@ -1559,86 +1563,6 @@ mod tests {
             body: Some("Please review".to_string()),
             base: Some("main".to_string()),
         }
-    }
-
-    #[test]
-    fn send_for_review_rejects_standalone_projects() {
-        let temp = tempfile::tempdir().unwrap();
-        let root = temp.path().join("demo");
-        std::fs::create_dir_all(&root).unwrap();
-        std::fs::write(root.join("intro.sk"), "{}").unwrap();
-        CutReadyDraftlineAdapter::open_project(&root).unwrap();
-
-        let error = send_for_review_with(
-            send_request(&root, "Ship it"),
-            |_| panic!("standalone projects must not reach the provider"),
-            &mut RemoteOptions::new(),
-        )
-        .unwrap_err();
-        assert_eq!(error.code, SEND_REQUIRES_HYBRID);
-
-        let error = send_for_review_with(
-            send_request(&root, "   "),
-            |_| panic!("blank titles must not reach the provider"),
-            &mut RemoteOptions::new(),
-        )
-        .unwrap_err();
-        assert_eq!(error.code, "invalid_request");
-    }
-
-    #[test]
-    fn send_for_review_pushes_a_cutready_branch_and_opens_a_pull_request() {
-        let temp = tempfile::tempdir().unwrap();
-        let remote = temp.path().join("remote.git");
-        init_bare_remote(&remote);
-        let code = temp.path().join("contoso-app");
-        std::fs::create_dir_all(code.join("cutready")).unwrap();
-        let mut options = git2::RepositoryInitOptions::new();
-        options.initial_head("main");
-        let repo = git2::Repository::init_opts(&code, &options).unwrap();
-        std::fs::write(code.join("README.md"), "# Contoso\n").unwrap();
-        let mut index = repo.index().unwrap();
-        index.add_path(Path::new("README.md")).unwrap();
-        index.write().unwrap();
-        let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
-        let signature = git2::Signature::now("Dev", "dev@example.com").unwrap();
-        repo.commit(Some("HEAD"), &signature, &signature, "Code", &tree, &[])
-            .unwrap();
-        repo.remote("origin", remote.to_str().unwrap())
-            .unwrap()
-            .push(&["refs/heads/main:refs/heads/main"], None)
-            .unwrap();
-
-        let folder = code.join("cutready");
-        std::fs::write(folder.join("intro.sk"), r#"{"title":"Intro"}"#).unwrap();
-        save(&folder, "Intro");
-
-        let host = FakeHost::default();
-        let requests = host.requests.clone();
-        let mut seen_url = None;
-        let result = send_for_review_with(
-            send_request(&folder, "Launch demo"),
-            |url| {
-                seen_url = Some(url.to_string());
-                Ok(Box::new(host))
-            },
-            &mut RemoteOptions::new(),
-        )
-        .unwrap();
-
-        assert_eq!(seen_url.as_deref(), remote.to_str());
-        assert_eq!(result.variation, "cutready/launch-demo");
-        assert_eq!(result.base, "main");
-        assert!(result.created_variation && result.created_pull_request);
-        assert_eq!(result.pull_request.number, 9);
-        let requests = requests.lock().unwrap();
-        assert_eq!(requests.len(), 1);
-        assert_eq!(requests[0].head, "cutready/launch-demo");
-        assert_eq!(requests[0].body, "Please review");
-        assert!(git2::Repository::open_bare(&remote)
-            .unwrap()
-            .find_branch("cutready/launch-demo", git2::BranchType::Local)
-            .is_ok());
     }
 
     #[test]
@@ -1757,7 +1681,7 @@ mod tests {
             .is_err());
     }
 
-    fn git(dir: &Path, args: &[&str]) {
+    pub(super) fn git(dir: &Path, args: &[&str]) {
         let output = git_command()
             .current_dir(dir)
             .args(["-c", "user.name=Dev", "-c", "user.email=dev@example.com"])
@@ -1816,7 +1740,7 @@ mod tests {
         (code, folder, temp.join("dev"))
     }
 
-    fn dev_push(dev: &Path, path: &str, content: &str, message: &str) {
+    pub(super) fn dev_push(dev: &Path, path: &str, content: &str, message: &str) {
         let file = dev.join(path);
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(file, content).unwrap();

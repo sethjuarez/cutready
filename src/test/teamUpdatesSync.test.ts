@@ -9,6 +9,7 @@ const dl = vi.hoisted(() => ({
   auth: vi.fn(async () => ({ connected: true })),
   preflightRebase: vi.fn(),
   rebase: vi.fn(),
+  sendReview: vi.fn(async (..._args: unknown[]) => ({ pull_request: { url: "https://github.com/contoso/talk/pull/31" } })),
 }));
 vi.mock("../services/draftlineVersioning", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../services/draftlineVersioning")>()),
@@ -19,6 +20,7 @@ vi.mock("../services/draftlineVersioning", async (importOriginal) => ({
   publishDraftlineChanges: dl.publish,
   preflightDraftlineRebaseIncoming: dl.preflightRebase,
   rebaseDraftlineIncoming: dl.rebase,
+  sendForReview: dl.sendReview,
 }));
 vi.mock("../services/githubSetup", () => ({ getGitHubAuthStatus: dl.auth }));
 
@@ -267,6 +269,46 @@ describe("send with team updates waiting", () => {
     const { sendForReview } = sendSetup(true);
     await useSyncStore.getState().syncWithRemote({ name: "initial outline", comment: "first pass" });
     expect(sendForReview).toHaveBeenCalledWith("initial outline", "first pass", 1);
+  });
+
+  it("names the review after the user's save, not the team updates Send brought in", async () => {
+    // Seth's sequence: an older team-update version blocks the replay, so Send
+    // combines the new team saves, then opens the review from the result.
+    connect({ state: "needsMerge", ahead: 2, behind: 3 });
+    const incoming = ["feat: #30 hero copy", "fix: #29 pricing", "feat: #28 lead queue"].map((name) => ({ name, comment: "", author: "Dana" }));
+    dl.preflightMerge.mockResolvedValue({ canMergeCleanly: true, token: TOKEN, conflicts: [], incoming, dirtyFiles: [], syncStatus: { ahead: 2, behind: 3 } });
+    const shared = { reachable_from_remote_variation: true };
+    const graph = (head: { message: string; comment: string } | null) => [
+      ...(head ? [{ id: "m2", message: head.message, comment: head.comment, parents: ["s", "t30"], is_head: true }] : []),
+      { id: "t30", message: "feat: #30 hero copy", parents: ["t28"], ...shared },
+      { id: "t28", message: "fix: #28 lead queue", parents: ["t25"], ...shared },
+      { id: "s", message: "initial outline", comment: "first pass", parents: ["m1"], is_head: !head },
+      { id: "m1", message: "chore(sync): bring in team updates (#25)", comment: "- #25 nav (Lee)", parents: ["base", "t25"] },
+      { id: "t25", message: "docs: #25 nav", parents: ["base"], ...shared },
+      { id: "base", message: "feat: setup", parents: [], ...shared },
+    ] as never;
+    useVersioningStore.setState({ graphNodes: graph(null), checkLargeFiles: vi.fn(async () => []) as never, refreshChangedFiles: vi.fn(async () => undefined) });
+    dl.mergeIncoming.mockImplementationOnce(async (_token, label) => {
+      const [message, , ...lines] = String(label).split("\n");
+      useVersioningStore.setState({ graphNodes: graph({ message, comment: lines.join("\n") }) });
+      return "m2";
+    });
+    useSyncStore.setState({
+      fetchFromRemote: vi.fn(async () => undefined),
+      refreshSyncStatus: vi.fn(async () => {
+        if (dl.mergeIncoming.mock.calls.length > 0) useSyncStore.setState({ syncStatus: { ahead: 3, behind: 0 } });
+      }),
+    });
+    useAppStore.setState({ currentProject: { name: "talk", root: "C:/talk", hybrid: true } as never });
+
+    await useSyncStore.getState().syncWithRemote();
+
+    expect(dl.mergeIncoming.mock.calls[0][1]).toMatch(/^chore\(sync\): bring in team updates \(#30, #29, #28/);
+    expect(dl.sendReview).toHaveBeenCalledWith({
+      remote: "origin",
+      title: "initial outline",
+      body: "first pass\n\nAlso includes 4 team updates that are already shared; they aren't part of this review.",
+    });
   });
 
   it("stops the send on a conflict", async () => {

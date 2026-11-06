@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { chipState, type ChipStateKind } from "../../domain/versioning";
 import { useChangeSummaryStore } from "../../stores/changeSummaryStore";
-import { useSyncStore } from "../../stores/syncStore";
+import { useSavesToSend } from "../../hooks/useSavesToSend";
 import { useVersioningStore } from "../../stores/versioningStore";
 import { ChangesPopover } from "./ChangesPopover";
 
@@ -22,7 +22,7 @@ export function StatusChip() {
   const storeSaving = useVersioningStore((s) => s.saving);
   const operationBusy = useChangeSummaryStore((s) => s.busyCount > 0);
   const saving = storeSaving || operationBusy;
-  const toSendCount = useSyncStore((s) => (s.currentRemote ? s.syncStatus?.ahead ?? 0 : 0));
+  const toSendCount = useSavesToSend();
   const saveFailure = useChangeSummaryStore((s) => s.saveFailure);
   const popoverOpen = useChangeSummaryStore((s) => s.popoverOpen);
   const setPopoverOpen = useChangeSummaryStore((s) => s.setPopoverOpen);
