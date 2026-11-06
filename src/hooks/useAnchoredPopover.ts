@@ -1,11 +1,12 @@
 import { useLayoutEffect, useState, type CSSProperties, type RefObject } from "react";
 
-/** Fixed-position style that keeps a portaled popover under its trigger, inside the window. */
+/** Fixed-position style that keeps a portaled popover beside its trigger (below by default), inside the window. */
 export function useAnchoredPopover(
   open: boolean,
   triggerRef: RefObject<HTMLElement | null>,
   width: number,
   align: "left" | "right",
+  placement: "below" | "above" = "below",
 ): CSSProperties | null {
   const [style, setStyle] = useState<CSSProperties | null>(null);
 
@@ -18,7 +19,9 @@ export function useAnchoredPopover(
       const effectiveWidth = Math.min(width, window.innerWidth - 16);
       const preferredLeft = align === "right" ? rect.right - effectiveWidth : rect.left;
       const left = Math.min(preferredLeft, window.innerWidth - effectiveWidth - 8);
-      setStyle({ position: "fixed", left: Math.max(8, left), top: rect.bottom + 4, width: effectiveWidth });
+      setStyle(placement === "above"
+        ? { position: "fixed", left: Math.max(8, left), bottom: window.innerHeight - rect.top + 4, width: effectiveWidth, maxHeight: Math.max(0, rect.top - 12) }
+        : { position: "fixed", left: Math.max(8, left), top: rect.bottom + 4, width: effectiveWidth });
     };
     updatePosition();
     window.addEventListener("resize", updatePosition);
@@ -27,7 +30,7 @@ export function useAnchoredPopover(
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [align, open, triggerRef, width]);
+  }, [align, open, placement, triggerRef, width]);
 
   return open ? style : null;
 }

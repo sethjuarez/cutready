@@ -13,7 +13,7 @@ import type { TimelineInfo } from "../../types/sketch";
 import { useConfirmDialog } from "../ConfirmDialog";
 import { NewTimelineForm } from "./NewTimelineForm";
 import { TimelineRows, menuInputClass, menuRowClass } from "./TimelineRows";
-import { useAnchoredPopover } from "./useAnchoredPopover";
+import { useAnchoredPopover } from "../../hooks/useAnchoredPopover";
 import { useTimelineSwitch } from "./useTimelineSwitch";
 
 const chipClass =
