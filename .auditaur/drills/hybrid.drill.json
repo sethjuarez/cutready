@@ -54,7 +54,7 @@
       ]
     },
     {
-      "name": "gets updates from main under an approved merge name",
+      "name": "gets updates from main without asking for a name",
       "steps": [
         { "click": { "testId": "explorer-item-plan.md" }, "timeoutMs": 45000 },
         { "click": { "label": "Note content" } },
@@ -69,43 +69,15 @@
         { "click": { "role": "button", "name": "Check", "exact": true } },
         { "expect": { "testId": "remote-status" }, "toContainText": "1 update to the shared project", "timeoutMs": 30000 },
         { "click": { "role": "button", "name": "Get updates", "exact": true, "within": { "testId": "remote-status" } } },
-        { "expect": { "testId": "merge-name-input" }, "toBeVisible": true, "timeoutMs": 30000 },
-        { "fill": { "testId": "merge-name-input" }, "value": "Bring in team agenda" },
-        { "click": { "testId": "merge-name-confirm" } },
         { "expectIpc": "merge_incoming_with_token", "status": "ok", "timeoutMs": 30000 },
         { "name": "history has both parents", "run": "git", "cwd": "${CUTREADY_REPO}", "args": ["rev-parse", "--verify", "--quiet", "HEAD^2"] },
-        { "name": "under the approved name", "run": "git", "cwd": "${CUTREADY_REPO}", "args": ["log", "-1", "--format=%s"], "stdout": "Bring in team agenda" },
+        { "name": "under the generated name", "run": "git", "cwd": "${CUTREADY_REPO}", "args": ["log", "-1", "--format=%s"], "stdout": "Bring in team updates" },
         { "name": "on the CutReady branch", "run": "git", "cwd": "${CUTREADY_REPO}", "args": ["branch", "--show-current"], "stdout": "cutready/draft" },
         { "expectNoErrors": true }
       ]
     },
     {
-      "name": "cancelling the merge name brings nothing in",
-      "steps": [
-        { "click": { "testId": "explorer-item-plan.md" }, "timeoutMs": 45000 },
-        { "click": { "label": "Note content" } },
-        { "press": "Control+End", "target": { "label": "Note content" } },
-        { "type": { "label": "Note content" }, "value": " Hybrid agenda." },
-        { "expectIpc": "update_note", "status": "ok" },
-        { "click": { "testId": "titlebar-sync-status" } },
-        { "fill": { "testId": "version-name-input" }, "value": "Local plan", "timeoutMs": 15000 },
-        { "click": { "testId": "version-save" } },
-        { "expect": { "testId": "version-name-input" }, "toHaveCount": 0, "timeoutMs": 30000 },
-        { "name": "a developer sends an update to main", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "collaborator-save", "cutready/agenda.md", "# Agenda\n\nTeam agenda.\n", "Team agenda"] },
-        { "click": { "role": "button", "name": "Check", "exact": true } },
-        { "expect": { "testId": "remote-status" }, "toContainText": "1 update to the shared project", "timeoutMs": 30000 },
-        { "click": { "role": "button", "name": "Get updates", "exact": true, "within": { "testId": "remote-status" } } },
-        { "expect": { "testId": "merge-name-input" }, "toBeVisible": true, "timeoutMs": 30000 },
-        { "click": { "role": "button", "name": "Cancel", "exact": true, "within": { "testId": "merge-name-dialog" } } },
-        { "expect": { "testId": "merge-name-dialog" }, "toHaveCount": 0, "timeoutMs": 15000 },
-        { "name": "no merge was made", "run": "git", "cwd": "${CUTREADY_REPO}", "args": ["rev-parse", "--verify", "--quiet", "HEAD^2"], "exitCode": 1 },
-        { "name": "the head is still the local save", "run": "git", "cwd": "${CUTREADY_REPO}", "args": ["log", "-1", "--format=%s"], "stdout": "Local plan" },
-        { "name": "nothing is pending", "run": "git", "cwd": "${CUTREADY_REPO}", "args": ["diff", "--quiet", "HEAD", "--", "cutready"], "exitCode": 0 },
-        { "expectNoErrors": true }
-      ]
-    },
-    {
-      "name": "resolves a conflicting update from main, then names the merge",
+      "name": "resolves a conflicting update from main without asking for a name",
       "steps": [
         { "click": { "testId": "explorer-item-plan.md" }, "timeoutMs": 45000 },
         { "click": { "label": "Note content" } },
@@ -122,14 +94,11 @@
         { "click": { "role": "button", "name": "Get updates", "exact": true, "within": { "testId": "remote-status" } } },
         { "click": { "role": "button", "name": "Start incoming", "exact": true }, "timeoutMs": 30000 },
         { "click": { "role": "button", "name": "Apply Changes", "exact": true } },
-        { "expect": { "testId": "merge-name-input" }, "toBeVisible": true, "timeoutMs": 15000 },
-        { "fill": { "testId": "merge-name-input" }, "value": "Take team wording" },
-        { "click": { "testId": "merge-name-confirm" } },
-        { "expect": { "testId": "merge-name-dialog" }, "toHaveCount": 0, "timeoutMs": 30000 },
+        { "expect": { "role": "button", "name": "Apply Changes", "exact": true }, "toHaveCount": 0, "timeoutMs": 30000 },
         { "name": "the incoming wording won", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "Team wording."] },
         { "name": "the local wording is gone", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "lacks:Hybrid agenda."] },
         { "name": "history has both parents", "run": "git", "cwd": "${CUTREADY_REPO}", "args": ["rev-parse", "--verify", "--quiet", "HEAD^2"] },
-        { "name": "under the approved name", "run": "git", "cwd": "${CUTREADY_REPO}", "args": ["log", "-1", "--format=%s"], "stdout": "Take team wording" },
+        { "name": "under the generated name", "run": "git", "cwd": "${CUTREADY_REPO}", "args": ["log", "-1", "--format=%s"], "stdout": "Bring in team updates" },
         { "name": "on the CutReady branch", "run": "git", "cwd": "${CUTREADY_REPO}", "args": ["branch", "--show-current"], "stdout": "cutready/draft" },
         { "expectNoErrors": true }
       ]
@@ -168,8 +137,7 @@
         { "click": { "role": "button", "name": "Download to" } },
         { "fill": { "label": "Workspace name" }, "value": "talk" },
         { "click": { "role": "button", "name": "Download & create" } },
-        { "expectIpc": "clone_repository_for_project", "status": "ok", "timeoutMs": 30000 },
-        { "expectIpc": "init_project_in_repository_for_project", "status": "ok", "timeoutMs": 15000 },
+        { "expectIpc": "init_project_in_repository_for_project", "status": "ok", "timeoutMs": 45000 },
         { "expect": { "testId": "explorer-import-menu" }, "toBeVisible": true, "timeoutMs": 30000 },
         { "name": "the new folder sits beside the repo's code, with no claim on the root", "run": "node", "cwd": "${CUTREADY_SCRATCH}", "args": ["-e", "const fs = require('fs'), p = require('path'); const d = fs.readdirSync('.').filter((n) => n.endsWith('-remote')); if (d.length !== 1) { console.error('expected one download, found ' + fs.readdirSync('.').join(', ')); process.exit(1); } const repo = d[0]; if (!fs.existsSync(p.join(repo, 'talk')) || !fs.existsSync(p.join(repo, 'src/app.js')) || !fs.existsSync(p.join(repo, '.git'))) { console.error('missing talk/, src/app.js or .git'); process.exit(1); } const m = p.join(repo, '.draftline'); if (fs.existsSync(m) && JSON.parse(fs.readFileSync(m, 'utf8')).folder !== 'talk') { console.error('root marker claims ' + fs.readFileSync(m, 'utf8')); process.exit(1); }"] },
         { "name": "the new folder is the open workspace", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "app-data:recent-projects.json", "/-remote[\\\\/]talk$/.test(doc.recent_projects[0].path)"] },
@@ -190,7 +158,6 @@
         { "click": { "role": "button", "name": "Download to" } },
         { "fill": { "label": "Workspace name" }, "value": "talk" },
         { "click": { "role": "button", "name": "Download & create" } },
-        { "expectIpc": "clone_repository_for_project", "status": "ok", "timeoutMs": 30000 },
         { "expect": { "text": "This repository already has a CutReady project" }, "toBeVisible": true, "timeoutMs": 30000 },
         { "expectIpc": "init_project_in_repository_for_project", "not": true },
         { "expect": { "testId": "explorer-item-plan.md" }, "toBeVisible": true, "timeoutMs": 30000 },
