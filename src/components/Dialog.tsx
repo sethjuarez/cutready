@@ -52,7 +52,10 @@ export function Dialog({
 }: DialogProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const stackId = useId();
-  const isTopDialog = useSyncExternalStore(subscribeStack, topOfStack) === stackId;
+  const top = useSyncExternalStore(subscribeStack, topOfStack);
+  // An open dialog not on the stack yet is about to join it on top; treating it
+  // as top keeps its first commit from rendering aria-hidden and inert.
+  const isTopDialog = top === stackId || (isOpen && !openStack.includes(stackId));
 
   useEffect(() => {
     if (!isOpen) return;
