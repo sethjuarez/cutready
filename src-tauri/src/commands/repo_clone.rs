@@ -51,11 +51,20 @@ pub async fn clone_from_url(url: String, dest: String) -> Result<String, CmdErro
 }
 
 fn opened_folder(adapter: &CutReadyDraftlineAdapter) -> String {
-    adapter
-        .root()
-        .join(adapter.scope())
-        .to_string_lossy()
-        .into_owned()
+    folder_in_repository(adapter.root(), adapter.scope())
+}
+
+/// The folder to open: the repository root, or its CutReady folder. Git
+/// reports the root with a trailing separator; keep it off the opened path so
+/// recents don't get a second entry for the same folder.
+fn folder_in_repository(root: &std::path::Path, scope: &std::path::Path) -> String {
+    let folder = root.join(scope).to_string_lossy().into_owned();
+    let trimmed = folder.trim_end_matches(['/', '\\']);
+    if trimmed.is_empty() || trimmed.ends_with(':') {
+        folder
+    } else {
+        trimmed.to_string()
+    }
 }
 
 /// A finished clone, and whether Git skipped old file contents.
@@ -216,6 +225,23 @@ fn failed(code: &str, message: impl Into<String>) -> contract::TauriCommandError
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn opened_folder_has_no_trailing_separator_for_a_standalone_repository() {
+        let workdir = std::path::Path::new("C:/drill/demo-remote/");
+        assert_eq!(
+            folder_in_repository(workdir, std::path::Path::new("")),
+            "C:/drill/demo-remote"
+        );
+        assert!(
+            folder_in_repository(workdir, std::path::Path::new("cutready"))
+                .ends_with("demo-remote/cutready")
+        );
+        assert_eq!(
+            folder_in_repository(std::path::Path::new("C:/"), std::path::Path::new("")),
+            "C:/"
+        );
+    }
 
     #[test]
     fn repository_errors_keep_codes_ui_can_explain() {
