@@ -6,6 +6,7 @@ import { discardChangesWithUndo } from "../../services/discardWithUndo";
 import { isSaveBlocked } from "../../services/versionOperation";
 import { useAppStore } from "../../stores/appStore";
 import { useChangeSummaryStore } from "../../stores/changeSummaryStore";
+import { ChangeChips } from "./ChangeChips";
 import { draftlineToRepoPath } from "../../utils/draftlinePaths";
 
 const isDatabasePath = (path: string) => /\.(db|sqlite|sqlite3)$/i.test(path);
@@ -71,17 +72,7 @@ export function ChangeList() {
         >
           {expanded ? <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
           <span className="sr-only">{expanded ? "Hide" : "Show"} {count} changed documents:</span>
-          {chips.map((chip) => (
-            <span
-              key={chip.id}
-              data-chip={chip.id}
-              className={`rounded-full px-2 py-0.5 text-2xs font-medium ${
-                chip.id === "conflicts" ? "bg-error/10 text-error" : "bg-[rgb(var(--color-surface-alt))] text-[rgb(var(--color-text-secondary))]"
-              }`}
-            >
-              {chip.label}
-            </span>
-          ))}
+          <ChangeChips chips={chips} />
         </button>
         <button
           type="button"

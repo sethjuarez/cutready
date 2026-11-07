@@ -95,6 +95,14 @@ export function summarizeChanges(inputs: readonly FileChangeInput[]): ChangeSumm
   return { documents, totals };
 }
 
+/** The part of a summary that touches `path`, with totals recounted. */
+export function summaryForPath(summary: ChangeSummary, path: string): ChangeSummary {
+  const documents = summary.documents.filter((doc) => doc.path === path || doc.previousPath === path);
+  const totals = { ...EMPTY_TOTALS };
+  for (const change of documents) addToTotals(totals, change);
+  return { documents, totals };
+}
+
 /**
  * Loads before/after text for one changed file. For a rename, read `before`
  * from `previousPath` when it's known. Return null text for binaries or

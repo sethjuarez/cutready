@@ -67,7 +67,7 @@ cutready-contracts = { path = "../crates/cutready-contracts", features = ["serde
 cutready-core = { path = "../crates/cutready-core" }
 cutready-desktop-io = { path = "../crates/cutready-desktop-io" }
 cutready-versioning = { path = "../crates/cutready-versioning" }
-draftline = "0.12.0"
+draftline = "0.13.0"
 # Already in the tree through Draftline; used directly to read the git config
 # identity that contributor attribution falls back to.
 git2 = { version = "0.21", default-features = false }

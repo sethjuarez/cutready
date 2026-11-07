@@ -15,6 +15,7 @@ import {
 } from "../services/draftlineErrors";
 import { getGitHubAuthStatus } from "../services/githubSetup";
 import { draftlinePathVariants } from "../utils/draftlinePaths";
+import { parseCompareTabPath, WORKSPACE } from "../domain/compare/compareTarget";
 import type { ProjectView } from "../types/project";
 import type { RemoteInfo } from "../types/sketch";
 import { useMergeNameStore } from "./mergeNameStore";
@@ -215,6 +216,27 @@ export function isDocumentTab(tab: EditorTab): tab is EditorTab & { type: "sketc
   return tab.type === "sketch" || tab.type === "storyboard" || tab.type === "note" || tab.type === "chat-artifact";
 }
 
+/** Whether a tab still shows correct content after workspace files are rewritten: History, app-state views, and comparisons between two saved versions. */
+function survivesRewrite(tab: EditorTab): boolean {
+  if (tab.type === "history" || tab.type === "agent-run" || tab.type === "database") return true;
+  if (tab.type !== "compare") return false;
+  const target = parseCompareTabPath(tab.path);
+  return !!target && target.to !== WORKSPACE;
+}
+
+/** The tabs to keep open, and which is active, after a rewrite of workspace files. */
+export function tabsSurvivingRewrite(tabs: EditorTab[], activeTabId: string | null): { tabs: EditorTab[]; activeTabId: string | null } {
+  const kept = tabs.filter(survivesRewrite);
+  return { tabs: kept, activeTabId: nextActiveTabIdAfterFiltering(tabs, kept, activeTabId) };
+}
+
+/** The editor group to focus once both groups have been filtered. */
+export function editorGroupAfterFiltering(previous: "main" | "split", mainCount: number, splitCount: number): "main" | "split" {
+  if (splitCount === 0) return "main";
+  if (mainCount === 0) return "split";
+  return previous;
+}
+
 export function nextActiveTabIdAfterFiltering(previousTabs: EditorTab[], nextTabs: EditorTab[], activeTabId: string | null): string | null {
   if (!activeTabId) return null;
   if (nextTabs.some((tab) => tab.id === activeTabId)) return activeTabId;
@@ -344,12 +366,15 @@ export async function rewriteWorkspaceFiles(
     await app().loadStoryboards();
     await app().loadNotes();
     await app().loadChatArtifacts();
+    // Document tabs and views of the working copy close so they reload from disk; History and version-to-version compares stay.
+    const main = tabsSurvivingRewrite(app().openTabs, app().activeTabId);
+    const split = tabsSurvivingRewrite(app().splitTabs, app().splitActiveTabId);
     set({
-      openTabs: [],
-      activeTabId: null,
-      splitTabs: [],
-      splitActiveTabId: null,
-      activeEditorGroup: "main",
+      openTabs: main.tabs,
+      activeTabId: main.activeTabId,
+      splitTabs: split.tabs,
+      splitActiveTabId: split.activeTabId,
+      activeEditorGroup: editorGroupAfterFiltering(app().activeEditorGroup, main.tabs.length, split.tabs.length),
       editorReloadPath: null,
     });
     globalThis.setTimeout(() => clearSuppressedEditorFlushes(suppressedPaths), 100);

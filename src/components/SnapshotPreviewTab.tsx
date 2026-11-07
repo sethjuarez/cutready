@@ -15,6 +15,7 @@ import {
 import { snapshotDiffTabPath } from "./DiffViewer";
 import { RestoreVersionDialog, type RestoreTarget } from "./versioning/RestoreVersionDialog";
 import { RestoreDocumentButton } from "./versioning/RestoreDocumentButton";
+import { CompareWithNowButton } from "./compare/CompareWithNowButton";
 import { StartBranchControls } from "./versioning/StartBranchControls";
 import { requestPreAction } from "../services/preAction";
 import { isSaveBlocked } from "../services/versionOperation";
@@ -299,15 +300,14 @@ export function SnapshotPreviewTab({ snapshotId }: SnapshotPreviewTabProps) {
               <span className="text-success">+{totalAdded}</span>
               <span className="text-error">-{totalRemoved}</span>
             </div>
-            <button
-              type="button"
+            <CompareWithNowButton versionId={snapshotId} versionName={versionName} />
+            <button type="button"
               onClick={() => setRestoreTarget({ versionId: snapshotId, versionName, scope: { kind: "project" } })}
               className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] px-3 text-xs font-medium text-[rgb(var(--color-text))] transition-colors hover:border-[rgb(var(--color-accent))] hover:text-[rgb(var(--color-accent))]"
               title="Bring the whole project back to this version, saved as a new version"
               data-testid="restore-version"
             >
-              <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-              Restore this version
+              <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" /> Restore this version
             </button>
             <StartBranchControls
               activeTimelineLabel={activeTimeline?.label ?? "current branch"}

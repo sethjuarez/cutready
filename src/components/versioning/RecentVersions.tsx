@@ -1,13 +1,12 @@
 import { firstParentTimelineNodes } from "../../utils/timelineNodes";
 import { formatRelativeDate } from "../../utils/relativeDate";
-import { useAppStore } from "../../stores/appStore";
+import { openHistoryTab } from "../../hooks/useVersioningLifecycle";
 import { useVersioningStore } from "../../stores/versioningStore";
 
 /** The last three versions, each opening a preview, plus "Open history". */
 export function RecentVersions({ onNavigate }: { onNavigate: () => void }) {
   const graphNodes = useVersioningStore((s) => s.graphNodes);
   const openSnapshotPreview = useVersioningStore((s) => s.openSnapshotPreview);
-  const openTab = useAppStore((s) => s.openTab);
   const recent = firstParentTimelineNodes(graphNodes).slice(0, 3);
 
   return (
@@ -18,7 +17,7 @@ export function RecentVersions({ onNavigate }: { onNavigate: () => void }) {
           type="button"
           onClick={() => {
             onNavigate();
-            openTab({ type: "history", path: "__history__", title: "History Graph" });
+            openHistoryTab();
           }}
           className="rounded-control px-1 text-2xs font-medium text-[rgb(var(--color-accent))] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]"
           data-testid="open-history"

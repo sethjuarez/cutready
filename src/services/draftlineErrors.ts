@@ -36,6 +36,7 @@ export const DraftlineErrorCode = {
   InvalidDestination: "invalid_destination",
   ProjectStateBusy: "project_state_busy",
   ProjectStateStranded: "project_state_stranded",
+  FileTooLarge: "file_too_large",
 } as const;
 
 /** A folder CutReady refused to start managing because it holds other files (typically code). */
@@ -258,6 +259,14 @@ export function shelfOverlapPaths(error: unknown): string[] | null {
   if (draftlineErrorCode(error) !== DraftlineErrorCode.ShelfOverlapsUnsavedChanges) return null;
   const paths = draftlineErrorDetails(error)?.paths;
   return Array.isArray(paths) ? paths.filter((path): path is string => typeof path === "string") : [];
+}
+
+/** Friendly copy for a `file_too_large` refusal, or null for any other error. */
+export function fileTooLargeMessage(error: unknown): string | null {
+  if (draftlineErrorCode(error) !== DraftlineErrorCode.FileTooLarge) return null;
+  const size = draftlineErrorDetails(error)?.size;
+  const megabytes = typeof size === "number" ? ` (${(size / (1024 * 1024)).toFixed(1)} MB)` : "";
+  return `This version of the file is too large to preview${megabytes}.`;
 }
 
 /** Errors where Draftline refused before changing anything, so retrying is safe. */

@@ -135,15 +135,13 @@ impl Drop for BrowserConnection {
 pub struct AppState {
     /// The currently open repository (if any).
     pub current_repo: Mutex<Option<RepoView>>,
-    /// The active project within the repo. In single-project mode, root == repo root.
-    /// All existing `project_root()` callers read from this field — no changes needed.
+    /// The active project within the repo (`project_root()` reads it). In single-project mode, root == repo root.
     pub current_project: Mutex<Option<ProjectView>>,
     /// The prepared browser connection (if any).
     /// Uses `tokio::sync::Mutex` because it's held across await points.
     pub browser: Arc<tokio::sync::Mutex<Option<BrowserConnection>>>,
-    /// Per-run steering registry: routes composer messages to the specific
-    /// in-flight run they were meant for (keyed by client run id), so
-    /// concurrent runs never drain each other's steering.
+    /// Per-run steering registry: routes composer messages to the in-flight run they target
+    /// (keyed by client run id), so concurrent runs never drain each other's steering.
     pub prompty_steering: crate::engine::agent::steering::SteeringRegistry,
     /// Agent-state run IDs that are actively owned by this process.
     pub active_agent_runs: Arc<Mutex<HashSet<String>>>,
@@ -670,11 +668,13 @@ pub fn run() {
             commands::draftline::add_remote,
             commands::draftline::list_support_refs,
             commands::draftline::get_changes,
-            commands::draftline::get_workspace_graph_for_variation,
-            commands::draftline::diff_versions,
-            commands::draftline::diff_version_to_workspace,
-            commands::draftline::preview_version_file,
-            commands::draftline::preview_workspace_file,
+            commands::draftline_history::get_workspace_graph_for_variation,
+            commands::draftline_history::get_path_history,
+            commands::draftline_history::diff_versions,
+            commands::draftline_history::diff_version_to_workspace,
+            commands::draftline_history::preview_version_file,
+            commands::draftline_history::preview_workspace_file,
+            commands::draftline_history::read_version_file_bytes,
             commands::version_saves::save,
             commands::draftline::move_project_folder,
             commands::draftline::list_shelves,

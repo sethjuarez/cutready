@@ -11,7 +11,8 @@
 //   node scripts/auditaur-drill-fixture.mjs setup .auditaur/fixtures/<name>.json
 //   node scripts/auditaur-drill-fixture.mjs teardown
 //   node scripts/auditaur-drill-fixture.mjs expect-json <file> <js expression over doc>
-//   (<file> is fixture-relative, app-data:<file> for the app data folder, or scratch:<file>)
+//   (<file> is fixture-relative, app-data:<file> for the app data folder, scratch:<file>, or repo:<file>
+//   for the enclosing code repo of a hybrid fixture)
 //   node scripts/auditaur-drill-fixture.mjs expect-file <file> <absent | exists | zip | text it must contain | lacks:text>
 //   node scripts/auditaur-drill-fixture.mjs expect-agent-runs --provider <id> [--model <m> | --model-prefix <p>]
 //        [--engine <id>] [--min-completed <n>] [--tools a,b,...]
@@ -49,6 +50,11 @@
 //                  main; a branch starts at the latest save (main stays checked out)
 //   scratch        { sketches, notes, files }  a folder outside the project (<root>-scratch, env
 //                  CUTREADY_SCRATCH) for dialog import sources and export targets; reset rebuilds it
+//   hybrid         { folder, code: [{ path, body }], checkout }: a hybrid project. The repo (a code repo
+//                  with `code` files) is the temp root and the project is its `folder` subfolder, with no
+//                  .git of its own (CUTREADY_PROJECT is the folder, CUTREADY_REPO the repo). History,
+//                  remotes and resets act on the repo; spec files land in the folder; collaborator paths
+//                  are repo-relative. `checkout` switches to (creating) a branch after seeding.
 //   mockLlm        true: starts scripts/auditaur-mock-llm.mjs on 127.0.0.1 and seeds an OpenAI
 //                  provider (model drill-mock) pointing at it as the active and default provider.
 //                  No key is seeded: tests type a dummy key in Settings, which lands in the
@@ -77,7 +83,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve, sep } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 
 const DRILL_DIR = resolve("target", "auditaur-drill");
 const STATE = join(DRILL_DIR, "state.json");
@@ -122,8 +128,9 @@ function setup(specPath) {
   }
   const spec = JSON.parse(readFileSync(resolve(specPath), "utf8"));
   const prefix = spec.prefix ?? "cutready-drill-";
-  const projectRoot = mkdtempSync(join(tmpdir(), prefix));
-  const state = { projectRoot, prefix, backups: [] };
+  const repoRoot = mkdtempSync(join(tmpdir(), prefix));
+  const projectRoot = spec.hybrid ? childPath(repoRoot, spec.hybrid.folder ?? "cutready") : repoRoot;
+  const state = { projectRoot, repoRoot, prefix, backups: [] };
   mkdirSync(BACKUP_DIR, { recursive: true });
   // Persist state (atomically) before mutating user stores so a crash can always be undone.
   const saveState = () => {
@@ -133,11 +140,12 @@ function setup(specPath) {
   };
   saveState();
 
+  mkdirSync(projectRoot, { recursive: true });
+  if (spec.hybrid) writeProject(repoRoot, { files: spec.hybrid.code ?? [] });
   writeProject(projectRoot, spec);
-  if (spec.history?.length) seedHistory(projectRoot, spec.history);
-  // Files as written, before the app opens (and imports, e.g., legacy .chats) — `reset` restores them.
-  rmSync(PRISTINE_DIR, { recursive: true, force: true });
-  cpSync(projectRoot, PRISTINE_DIR, { recursive: true, filter: (src) => !isGitDir(projectRoot, src) });
+  if (spec.history?.length) seedHistory(repoRoot, spec.history, projectRoot);
+  // A hybrid project lives in a code repo that already has history.
+  else if (spec.hybrid && !spec.remote?.seedSave) seedHistory(repoRoot, [{ save: "Initial code" }], projectRoot);
   // Reset re-seeds exactly these (backed-up) stores, even if the spec file changes mid-run.
   state.stores = { settingsSeed: spec.globalSettings?.seed, appStores: spec.appStores ?? [] };
   saveState();
@@ -185,25 +193,29 @@ function setup(specPath) {
   }
 
   if (spec.remote) {
-    state.extraRoots = [...(state.extraRoots ?? []), remotePath(projectRoot), collaboratorPath(projectRoot)];
+    state.extraRoots = [...(state.extraRoots ?? []), remotePath(repoRoot), collaboratorPath(repoRoot)];
     saveState();
-    git(["init", "--bare", "--initial-branch=main", remotePath(projectRoot)]);
-    if (spec.remote.seedSave) seedSharedSave(projectRoot, spec.remote.seedSave);
-    if (spec.remote.seedSave && spec.remote.origin === false) git(["remote", "remove", "origin"], projectRoot);
-    state.remoteRefs = gitRefs(["--git-dir", remotePath(projectRoot)]);
+    git(["init", "--bare", "--initial-branch=main", remotePath(repoRoot)]);
+    if (spec.remote.seedSave) seedSharedSave(repoRoot, spec.remote.seedSave);
+    if (spec.remote.seedSave && spec.remote.origin === false) git(["remote", "remove", "origin"], repoRoot);
+    state.remoteRefs = gitRefs(["--git-dir", remotePath(repoRoot)]);
     saveState();
-    appendFileSync(envFile, `CUTREADY_REMOTE_URL=${pathToFileURL(remotePath(projectRoot)).href}\n`);
+    appendFileSync(envFile, `CUTREADY_REMOTE_URL=${pathToFileURL(remotePath(repoRoot)).href}\n`);
   }
+  if (spec.hybrid?.checkout) git(["switch", "-C", spec.hybrid.checkout], repoRoot);
+  // Files as written, before the app opens (and imports, e.g., legacy .chats) — `reset` restores them.
+  rmSync(PRISTINE_DIR, { recursive: true, force: true });
+  cpSync(repoRoot, PRISTINE_DIR, { recursive: true, filter: (src) => !isGitDir(repoRoot, src) });
 
   if (spec.scratch) {
     state.scratch = spec.scratch;
-    state.extraRoots = [...(state.extraRoots ?? []), scratchPath(projectRoot)];
+    state.extraRoots = [...(state.extraRoots ?? []), scratchPath(repoRoot)];
     saveState();
     writeScratch(state);
-    appendFileSync(envFile, `CUTREADY_SCRATCH=${scratchPath(projectRoot)}\n`);
+    appendFileSync(envFile, `CUTREADY_SCRATCH=${scratchPath(repoRoot)}\n`);
   }
 
-  appendFileSync(envFile, `CUTREADY_PROJECT=${projectRoot}\n`);
+  appendFileSync(envFile, `CUTREADY_PROJECT=${projectRoot}\nCUTREADY_REPO=${repoRoot}\n`);
   console.log(`Drill fixture ready at ${projectRoot}`);
 }
 
@@ -232,8 +244,15 @@ function teardown() {
     }
   }
   removeFromRecents(state.prefix);
-  if (state.projectRoot) rmSync(state.projectRoot, { recursive: true, force: true });
-  for (const root of state.extraRoots ?? []) rmSync(root, { recursive: true, force: true });
+  const root = state.repoRoot ?? state.projectRoot;
+  for (const path of [root, ...(state.extraRoots ?? [])].filter(Boolean)) {
+    if (!isTempFixturePath(path, state.prefix)) {
+      failed = true;
+      console.error(`REFUSED to remove ${path}: it is not a drill fixture under ${tmpdir()}`);
+      continue;
+    }
+    rmSync(path, { recursive: true, force: true });
+  }
   rmSync(PRISTINE_DIR, { recursive: true, force: true });
   rmSync(BASELINE_DRAFTLINE_DIR, { recursive: true, force: true });
   rmSync(DRILL_VAULT_DIR, { recursive: true, force: true });
@@ -276,8 +295,8 @@ function seedAppStores({ settingsSeed, appStores }) {
 function reset() {
   if (!existsSync(STATE)) throw new Error("reset needs a fixture from `setup`");
   const state = JSON.parse(readFileSync(STATE, "utf8"));
-  const root = fixtureRoot();
-  if (resolve(root) !== resolve(state.projectRoot)) throw new Error(`CUTREADY_PROJECT ${root} is not the fixture project`);
+  if (resolve(fixtureRoot()) !== resolve(state.projectRoot)) throw new Error(`CUTREADY_PROJECT ${fixtureRoot()} is not the fixture project`);
+  const root = state.repoRoot ?? state.projectRoot;
   const gitDir = join(root, ".git");
 
   if (!state.baseline) {
@@ -286,7 +305,7 @@ function reset() {
       if (!existsSync(join(gitDir, "HEAD"))) throw new Error("the app has not opened the project yet");
     }, 20000);
     if (resolve(root, git(["rev-parse", "--git-dir"], root).trim()) !== resolve(gitDir)) {
-      throw new Error("reset only supports a standalone project repo");
+      throw new Error("reset only supports a project (or hybrid project's repo) that owns its .git");
     }
     const head = spawnSync("git", ["rev-parse", "--verify", "--quiet", "HEAD"], { cwd: root, encoding: "utf8", windowsHide: true });
     state.baseline = {
@@ -333,9 +352,9 @@ function reset() {
   }
   if (state.remoteRefs) resetRemote(root, state.remoteRefs);
 
-  // A standalone project's agent state lives in .git/cutready; the app opens it per call
-  // and re-imports the project's legacy .chats when it recreates it.
-  const stateDir = join(gitDir, "cutready");
+  // Agent state lives in .git/cutready (.git/cutready/<folder> for a hybrid project); the app
+  // opens it per call and re-imports the project's legacy .chats when it recreates it.
+  const stateDir = agentStateDir(root, state.projectRoot);
   for (const name of existsSync(stateDir) ? readdirSync(stateDir) : []) {
     if (/^(agent-state\.db(-wal|-shm|-journal)?|memory\.json)$/.test(name)) {
       eventually(() => rmSync(join(stateDir, name), { force: true }), 10000);
@@ -355,6 +374,35 @@ function fixtureRoot() {
   const root = process.env.CUTREADY_PROJECT;
   if (!root) throw new Error("CUTREADY_PROJECT is unset; run this as an `auditaur drill test` step");
   return root;
+}
+
+// The git repo the fixture owns: the project, or a hybrid project's enclosing code repo.
+function repoRoot() {
+  if (!existsSync(STATE)) return fixtureRoot();
+  const state = JSON.parse(readFileSync(STATE, "utf8"));
+  return state.repoRoot ?? state.projectRoot;
+}
+
+// A standalone project keeps agent state in .git/cutready; a hybrid one in .git/cutready/<folder>.
+function agentStateDir(repo, project) {
+  return join(repo, ".git", "cutready", relative(repo, project));
+}
+
+// Resolves a fixture-controlled relative path, refusing anything that escapes `root`.
+function childPath(root, path) {
+  const base = resolve(root);
+  const child = resolve(base, path);
+  const rel = relative(base, child);
+  if (!rel || rel === ".." || rel.startsWith(`..${sep}`) || resolve(rel) === rel) {
+    throw new Error(`fixture path ${JSON.stringify(path)} must stay inside ${base}`);
+  }
+  return child;
+}
+
+// Teardown only deletes what setup created: a prefixed directory (or its sibling) in tmpdir.
+function isTempFixturePath(path, prefix = "cutready-drill-") {
+  const rel = relative(resolve(tmpdir()), resolve(path));
+  return Boolean(rel) && !rel.startsWith("..") && !rel.includes(sep) && rel.startsWith(prefix);
 }
 
 // Editors save on a debounce, so file checks retry briefly before failing.
@@ -407,7 +455,7 @@ function expectFile(file, expectation) {
 // Reads the project's agent-state.db after the app closes: completed runs must
 // use the expected provider/model/engine, and checkpoints must show the tools.
 async function expectAgentRuns(flags) {
-  const dbPath = join(fixtureRoot(), ".git", "cutready", "agent-state.db");
+  const dbPath = join(agentStateDir(repoRoot(), fixtureRoot()), "agent-state.db");
   if (!existsSync(dbPath)) throw new Error(`agent-state.db was not created at ${dbPath}`);
   const { DatabaseSync } = await import("node:sqlite");
   const db = new DatabaseSync(dbPath, { readOnly: true });
@@ -561,9 +609,9 @@ function backup(state, path) {
 
 function writeProject(root, spec) {
   if (spec.copyFrom) cpSync(resolve(spec.copyFrom), root, { recursive: true });
-  for (const note of spec.notes ?? []) writeFileSync(join(root, note.path), note.body ?? "");
+  for (const note of spec.notes ?? []) writeFileSync(childPath(root, note.path), note.body ?? "");
   for (const file of spec.files ?? []) {
-    mkdirSync(dirname(join(root, file.path)), { recursive: true });
+    mkdirSync(dirname(childPath(root, file.path)), { recursive: true });
     const content = file.json
       ? `${JSON.stringify(file.json, null, 2)}\n`
       : file.base64 ? Buffer.from(file.base64, "base64") : file.body ?? "";
@@ -592,7 +640,7 @@ function scratchPath(projectRoot) {
 
 function writeScratch(state) {
   if (!state.scratch) return;
-  const root = scratchPath(state.projectRoot);
+  const root = scratchPath(state.repoRoot ?? state.projectRoot);
   rmSync(root, { recursive: true, force: true });
   mkdirSync(root, { recursive: true });
   writeProject(root, state.scratch);
@@ -651,7 +699,7 @@ function authorEnv(who) {
   return { GIT_AUTHOR_NAME: who.name, GIT_AUTHOR_EMAIL: who.email, GIT_COMMITTER_NAME: who.name, GIT_COMMITTER_EMAIL: who.email };
 }
 
-function seedHistory(root, steps) {
+function seedHistory(root, steps, projectRoot = root) {
   git(["init", "--initial-branch=main"], root);
   // Seeded files are checked out byte-for-byte, so a reset never shows them as edited.
   git(["config", "core.autocrlf", "false"], root);
@@ -660,7 +708,7 @@ function seedHistory(root, steps) {
       git(["branch", step.branch], root);
       continue;
     }
-    writeProject(root, step);
+    writeProject(projectRoot, step);
     git(["add", "-A"], root);
     git(["commit", "-m", step.save], root, authorEnv(SEEDER));
   }
@@ -709,7 +757,7 @@ function git(args, cwd, env) {
 }
 
 function connectRemote() {
-  const root = fixtureRoot();
+  const root = repoRoot();
   if (!existsSync(remotePath(root))) throw new Error("connect-remote needs a fixture spec with `remote: true`");
   if (!existsSync(join(root, ".git"))) throw new Error("the project has no .git yet; open it in the app first");
   git(["remote", "add", "origin", remotePath(root)], root);
@@ -720,7 +768,7 @@ function collaboratorSave(file, text, message, branch) {
   if (!file || text === undefined || !message || branch === "") {
     throw new Error("collaborator-save needs <file> <text> <message>; collaborator-branch needs <branch> <file> <text> <message>");
   }
-  const root = fixtureRoot();
+  const root = repoRoot();
   const clone = collaboratorPath(root);
   if (existsSync(clone)) {
     git(["checkout", "main"], clone);
@@ -741,7 +789,7 @@ function expectRemote(message) {
   if (!message) throw new Error("expect-remote needs <message>");
   // Send finishes in the background after the button settles, so retry briefly.
   eventually(() => {
-    const log = git(["--git-dir", remotePath(fixtureRoot()), "log", "--format=%s", "main"]);
+    const log = git(["--git-dir", remotePath(repoRoot()), "log", "--format=%s", "main"]);
     if (!log.split("\n").includes(message)) {
       throw new Error(`main on the remote has no save named ${JSON.stringify(message)}; it has:\n${log.trim()}`);
     }
@@ -752,7 +800,8 @@ function expectRemote(message) {
 function resolveExpectPath(file) {
   if (file.startsWith("app-data:")) return join(appDataDir(), file.slice(9));
   if (file.startsWith("drill-vault:")) return join(DRILL_VAULT_DIR, file.slice(12));
-  if (file.startsWith("scratch:")) return join(scratchPath(fixtureRoot()), file.slice(8));
+  if (file.startsWith("scratch:")) return join(scratchPath(repoRoot()), file.slice(8));
+  if (file.startsWith("repo:")) return join(repoRoot(), file.slice(5));
   return join(fixtureRoot(), file);
 }
 

@@ -10,7 +10,8 @@ import {
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Channel, invoke } from "../services/tauri";
 import type { TokenResponse } from "../types/auth";
-import { ArrowRight, AtSign, Copy, FileInput, FileText, Film, FolderOpen, Pencil, SquareTerminal } from "lucide-react";
+import { ArrowRight, AtSign, Copy, FileInput, FileText, Film, FolderOpen, History, Pencil, SquareTerminal } from "lucide-react";
+import { openDocumentHistory } from "../hooks/useVersioningLifecycle";
 import {
   clearSuppressedEditorFlush,
   makeMainTabId,
@@ -700,11 +701,8 @@ export function StoryboardList() {
     title: string,
   ): ContextMenuItem[] => {
     const items: ContextMenuItem[] = [
-      {
-        label: "Rename File...",
-        icon: <Pencil className="w-3.5 h-3.5" />,
-        action: () => startRename(type, path),
-      },
+      { label: "Rename File...", icon: <Pencil className="w-3.5 h-3.5" />, action: () => startRename(type, path) },
+      { label: "View history", icon: <History className="w-3.5 h-3.5" />, action: () => openDocumentHistory(path, title) },
     ];
 
     if (currentProject) {
