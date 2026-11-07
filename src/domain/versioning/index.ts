@@ -9,3 +9,5 @@ export * from "./projectScope";
 export * from "./timelines";
 export * from "./preAction";
 export * from "./setAsideShelf";
+export * from "./teamUpdates";
+export * from "./syncCopy";

@@ -34,23 +34,21 @@ optional — solo users who don't need it see zero additional UI.
   authenticated, CutReady picks up your credentials automatically.
 </Aside>
 
-## The Sync Bar
+## Sync Status
 
-Once a remote is configured, a **Sync Bar** appears in the Snapshots panel
-showing your connection status and sync state:
+Once a remote is configured, the changes popover shows one line of status:
 
-- **↑ N unpublished** — Local snapshots not yet pushed to remote
-- **↓ N incoming** — Remote snapshots not yet pulled
-- **Up to date** — Local and remote are in sync
+| Status | Meaning |
+| --- | --- |
+| **Up to date** | Nothing to send and nothing new from the team |
+| **N saves waiting to send** | Your saved versions haven't been sent yet |
+| **Team has N new updates** | Teammates sent work you don't have yet |
+| **Syncing…** | Checking, getting updates or sending |
+| **Sync needs attention** | Something went wrong; the message below says what |
 
-### Sync Actions
-
-| Button | When it appears | What it does |
-| --- | --- | --- |
-| **Sync** | Unpublished + incoming | Pushes local, then pulls remote |
-| **Send** | Only unpublished | Pushes your saved snapshots exactly as saved |
-| **Get** | Only incoming | Pulls remote snapshots |
-| **Fetch** | Always | Checks for remote changes without applying them |
+**Check** looks for new work without changing anything. **Get updates** brings
+the team's work in. **Send** shares your saves; if you have unsaved changes it
+asks you to save them as a version first.
 
 <Aside>
   In a project inside a code repository, **Send** becomes **Send for review**
@@ -58,28 +56,41 @@ showing your connection status and sync state:
   [Projects in a Code Repository](/collaboration/hybrid-projects/).
 </Aside>
 
-## Publishing Timelines
+## Team Updates
 
-Local timelines are just that — local. To share a timeline with collaborators
-or back it up to the remote:
+You only ever name your own saves. When teammates have sent work, **Send** and
+**Get updates** bring it in for you, with no extra prompt:
 
-1. Switch to the timeline you want to publish
-2. The Sync Bar shows *"Timeline 'X' is local only"*
-3. Click **Publish Timeline** to push it as a remote branch
+1. CutReady checks for the team's updates.
+2. Your unsent saves are replayed on top of them, so history stays a straight
+   line and your saves keep their names.
+3. Send then shares your saves and reports, for example,
+   _Sent ✓ (also picked up 2 team updates)_.
 
-Once published, the timeline syncs like Main — push/pull/sync all work.
+When replaying isn't possible, CutReady combines the two lines of work instead
+and records it in History as **Brought in team updates**, listing what came in
+and who sent it. That happens when:
 
-## Pulling with Conflicts
+- some of your saves were already shared;
+- another timeline was started from a save that hasn't been sent yet, so
+  replaying would leave that timeline behind;
+- you and a teammate changed the same file.
 
-When pulling remote changes that conflict with your local work, CutReady
-opens the same **Merge Conflict Panel** used for timeline merging:
+Open previews, Compare tabs and file diffs follow the replayed saves
+automatically.
 
-- Remote changes appear as "theirs"
-- Your local changes appear as "ours"
-- Resolution works identically — keep yours, keep theirs, or edit
+## When You and a Teammate Change the Same File
 
-See [Merging & Conflicts](/collaboration/merging/) for the full
-conflict resolution workflow.
+Only a real overlap asks you anything. The prompt names the people and files,
+for example _You and Dana both changed compass.sk_, and lets you keep yours,
+keep theirs or edit the result. See [Merging & Conflicts](/collaboration/merging/)
+for the full resolution panel.
+
+## Shared Timelines
+
+**Send** shares the timeline you're on. Timelines a teammate has shared appear
+under **Shared timelines** in the timeline menu; pick one to make your own copy
+and switch to it.
 
 ## Auto-Fetch
 
@@ -103,8 +114,8 @@ CutReady works fully offline — all project data is local. When you're
 offline:
 
 - Saving, branching, merging, and all local operations work normally
-- The Sync Bar shows a disconnected state
-- When connectivity returns, a simple Sync catches up
+- The sync status shows what's waiting to send
+- When connectivity returns, **Send** catches up
 
 ## How This Relates to Git
 
@@ -129,8 +140,8 @@ CutReady uses **progressive disclosure** for remote features:
 | --- | --- |
 | **Solo** (no remote) | Just the Snapshots panel — Save, Discard, Navigate |
 | **Timelines** (no remote) | Timeline selector + graph, no sync UI |
-| **Collaborator** (remote configured) | Full Sync Bar + publishing + timeline sync |
+| **Collaborator** (remote configured) | Sync status, Send, Get updates and shared timelines |
 
 No git terminology appears in the default UI. CutReady uses "snapshots" not
-"commits", "timelines" not "branches", "publish" not "push", and "sync" not
-"fetch/pull".
+"commits", "timelines" not "branches", "send" not "push", and "get updates" not
+"fetch/pull". Team work comes in without anyone naming a merge.

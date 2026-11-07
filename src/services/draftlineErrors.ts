@@ -77,7 +77,7 @@ export const GIT_INDEX_LOCKED_MESSAGE = "Git is busy in this project's repositor
 export const LOCAL_STATE_CHANGED_MESSAGE =
   "The project changed outside CutReady while this was running (for example, a developer committed). Nothing was lost — try again.";
 export const MERGE_UPDATES_CHANGED_MESSAGE =
-  "The updates changed while you were naming the merge. Nothing was merged — get updates and try again.";
+  "The team's updates changed while they were coming in. Nothing came in — get updates and try again.";
 export const VARIATION_OUTSIDE_NAMESPACE_MESSAGE =
   "That branch belongs to the code repository, not to CutReady. CutReady only works on its own branches and the main branch.";
 export const SEND_OUTSIDE_NAMESPACE_MESSAGE =
@@ -177,9 +177,9 @@ export function incomingFolderElsewhereMessage(folder?: string | null): string {
   return `The incoming changes move this CutReady project to ${folderName(folder)}. Ask a developer to bring them in, then open that folder.`;
 }
 
-/** Bringing in the base conflicts in files outside the CutReady folder. */
-export function mergeNeedsDeveloperMessage(base: string): string {
-  return `A developer needs to bring ${base} into this branch: files outside the CutReady folder conflict.`;
+/** The shared updates conflict in files outside the CutReady folder. */
+export function mergeNeedsDeveloperMessage(): string {
+  return "A developer needs to bring in the shared updates: files outside the CutReady folder changed on both sides.";
 }
 
 export function recoveryInOtherFolderMessage(folder?: string | null): string {
@@ -282,7 +282,7 @@ export function isRetryableDraftlineError(error: unknown): boolean {
 export function friendlyDraftlineErrorMessage(error: unknown): string | null {
   switch (draftlineErrorCode(error)) {
     case DraftlineErrorCode.MergeNeedsDeveloper:
-      return mergeNeedsDeveloperMessage("the base branch");
+      return mergeNeedsDeveloperMessage();
     case DraftlineErrorCode.RecoveryInOtherFolder: {
       const folder = draftlineErrorDetails(error)?.folder;
       return recoveryInOtherFolderMessage(typeof folder === "string" ? folder : null);

@@ -5,6 +5,7 @@ import { useToastStore } from "../stores/toastStore";
 import { friendlyDraftlineErrorMessage } from "../services/draftlineErrors";
 import type { ConflictFile, FileResolution } from "../types/sketch";
 import { SemanticConflictResolver } from "./SemanticConflictResolver";
+import { incomingAuthors, syncCopy, teammates } from "../domain/versioning";
 
 /**
  * MergeConflictPanel — shown when a merge has conflicts.
@@ -24,8 +25,11 @@ export function MergeConflictPanel() {
   // Track resolved content per file path
   const [resolutions, setResolutions] = useState<Record<string, string>>({});
   const [applying, setApplying] = useState(false);
-  const sourceLabel = formatMergeLabel(mergeSource ?? "source");
-  const targetLabel = mergeTarget === "incoming" ? "current workspace" : formatMergeLabel(mergeTarget ?? "target");
+  const incoming = useVersioningStore((s) => s.draftlineMergeIncoming);
+  // Team updates are framed around people and files, never timelines.
+  const team = mergeTarget === "incoming";
+  const sourceLabel = team ? teammates(incomingAuthors(incoming)) : formatMergeLabel(mergeSource ?? "source");
+  const targetLabel = team ? "You" : formatMergeLabel(mergeTarget ?? "target");
 
   const updateResolution = useCallback((path: string, content: string) => {
     setResolutions((prev) => ({ ...prev, [path]: content }));
@@ -42,11 +46,11 @@ export function MergeConflictPanel() {
         path: c.path,
         content: resolutions[c.path],
       }));
-      // Null: naming the merge was cancelled, so the panel stays open.
+      // Null: naming a "Merge into…" was cancelled, so the panel stays open.
       if (await applyMergeResolution(fileResolutions) === null) setApplying(false);
     } catch (err) {
       console.error("Failed to apply merge:", err);
-      useToastStore.getState().show(friendlyDraftlineErrorMessage(err) ?? "Couldn't apply the merge.", 6000, "error");
+      useToastStore.getState().show(friendlyDraftlineErrorMessage(err) ?? "Couldn't apply your choices.", 6000, "error");
       setApplying(false);
     }
   }, [allResolved, mergeConflicts, resolutions, applyMergeResolution]);
@@ -61,8 +65,12 @@ export function MergeConflictPanel() {
           </div>
           <div>
             <h2 className="text-sm font-semibold text-[rgb(var(--color-text))]">
-              Merging <span className="text-[rgb(var(--color-accent))]">{sourceLabel}</span> into{" "}
-              <span className="text-[rgb(var(--color-accent))]">{targetLabel}</span>
+              {team ? syncCopy.conflictTitle(incomingAuthors(incoming), mergeConflicts.map((c) => c.path)) : (
+                <>
+                  Merging <span className="text-[rgb(var(--color-accent))]">{sourceLabel}</span> into{" "}
+                  <span className="text-[rgb(var(--color-accent))]">{targetLabel}</span>
+                </>
+              )}
             </h2>
             <p className="text-2xs text-[rgb(var(--color-text-secondary))]">
               {resolvedCount === mergeConflicts.length

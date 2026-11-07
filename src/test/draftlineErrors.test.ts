@@ -56,7 +56,7 @@ describe("Draftline error messages", () => {
     ["variation_outside_namespace", VARIATION_OUTSIDE_NAMESPACE_MESSAGE],
     ["send_outside_namespace", SEND_OUTSIDE_NAMESPACE_MESSAGE],
     ["send_base_unknown", SEND_BASE_UNKNOWN_MESSAGE],
-    ["merge_needs_developer", mergeNeedsDeveloperMessage("the base branch")],
+    ["merge_needs_developer", mergeNeedsDeveloperMessage()],
     ["invalid_folder_marker", INVALID_FOLDER_MARKER_MESSAGE],
     ["newer_folder_marker", NEWER_FOLDER_MARKER_MESSAGE],
     ["git_filter_failed", GIT_FILTER_FAILED_MESSAGE],

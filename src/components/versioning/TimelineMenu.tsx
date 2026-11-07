@@ -6,6 +6,7 @@ import { openHistoryTab } from "../../hooks/useVersioningLifecycle";
 import { requestPreAction, startGetUpdates } from "../../services/preAction";
 import { isSaveBlocked } from "../../services/versionOperation";
 import { useAppStore } from "../../stores/appStore";
+import { syncCopy } from "../../domain/versioning/syncCopy";
 import { useSyncStore } from "../../stores/syncStore";
 import { useVersioningStore } from "../../stores/versioningStore";
 import type { TimelineInfo } from "../../types/sketch";
@@ -85,12 +86,12 @@ export function TimelineMenu() {
   };
   const adopt = (branch: string) => {
     close();
-    run(() => request(`${currentRemote?.name ?? "origin"}/${branch}`, () => checkoutRemoteTimeline(branch)));
+    run(() => request(`shared ${branch}`, () => checkoutRemoteTimeline(branch)));
   };
   const confirmAdopt = async (branch: string) => {
     const ok = await confirm({
-      title: "Adopt remote timeline?",
-      message: `This creates a local timeline from ${currentRemote?.name ?? "origin"}/${branch} and switches to it. Your current timeline is left unchanged.`,
+      title: "Work on the shared timeline?",
+      message: `This makes a copy of the shared timeline "${branch}" for you and switches to it. Your current timeline is left unchanged.`,
       confirmLabel: "Adopt and switch",
       cancelLabel: "Cancel",
       variant: "default",
@@ -148,29 +149,29 @@ export function TimelineMenu() {
           <div className="border-t border-[rgb(var(--color-border-subtle))] pb-1">
             <div className={sectionLabelClass}>
               <Cloud className="h-3 w-3" aria-hidden="true" />
-              <span className="min-w-0 flex-1 truncate">On {currentRemote.name}</span>
+              <span className="min-w-0 flex-1 truncate">{syncCopy.sharedTimelines}</span>
               <button
                 type="button"
                 onClick={() => void loadRemoteBranches()}
                 disabled={remoteLoading}
                 className="grid h-5 w-5 place-items-center rounded normal-case hover:bg-fill-hover disabled:opacity-40"
-                title="Refresh remote timelines"
-                aria-label="Refresh remote timelines"
+                title="Refresh shared timelines"
+                aria-label="Refresh shared timelines"
               >
                 <RefreshCw className={`h-3 w-3 ${remoteLoading ? "motion-safe:animate-spin" : ""}`} aria-hidden="true" />
               </button>
             </div>
             {remoteLoading && remoteBranches.length === 0
-              ? <p className="px-2 py-1 text-2xs text-[rgb(var(--color-text-secondary))]">Fetching remote timelines…</p>
+              ? <p className="px-2 py-1 text-2xs text-[rgb(var(--color-text-secondary))]">{syncCopy.findingSharedTimelines}</p>
               : remote.length === 0
-                ? <p className="px-2 py-1 text-2xs text-[rgb(var(--color-text-secondary))]">{filter ? `No remote timelines match "${filter}"` : "No remote-only timelines"}</p>
+                ? <p className="px-2 py-1 text-2xs text-[rgb(var(--color-text-secondary))]">{syncCopy.noSharedTimelines(filter)}</p>
                 : remote.map((branch) => (
                   <button
                     key={`${branch.remote}/${branch.id}`}
                     type="button"
                     onClick={() => run(() => confirmAdopt(branch.id))}
                     className={`${menuRowClass} text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-text))]`}
-                    title={`Adopt ${branch.remote}/${branch.name}`}
+                    title={`Work on the shared timeline "${branch.name}"`}
                   >
                     <span aria-hidden="true" className="ml-0.5 h-1.5 w-1.5 shrink-0 rounded-full border border-[rgb(var(--color-accent))]/60" />
                     <span className="min-w-0 flex-1 truncate">{branch.name}</span>
@@ -190,7 +191,7 @@ export function TimelineMenu() {
         {baseBehind > 0 && baseStatus && (
           <button type="button" disabled={isSyncing} onClick={() => { close(); startGetUpdates(useSyncStore.getState().getUpdatesFromBase); }} className={`${menuRowClass} text-[rgb(var(--color-text))] disabled:opacity-50`}>
             <GitMerge className="h-3 w-3 shrink-0" aria-hidden="true" />
-            Get updates from {baseStatus.base} ({baseBehind})
+            {syncCopy.getSharedUpdates} ({baseBehind})
           </button>
         )}
         {currentRemote && (

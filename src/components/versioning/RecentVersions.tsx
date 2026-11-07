@@ -2,6 +2,7 @@ import { firstParentTimelineNodes } from "../../utils/timelineNodes";
 import { formatRelativeDate } from "../../utils/relativeDate";
 import { openHistoryTab } from "../../hooks/useVersioningLifecycle";
 import { useVersioningStore } from "../../stores/versioningStore";
+import { plainVersion } from "../../domain/versioning/teamUpdates";
 
 /** The last three versions, each opening a preview, plus "Open history". */
 export function RecentVersions({ onNavigate }: { onNavigate: () => void }) {
@@ -29,28 +30,31 @@ export function RecentVersions({ onNavigate }: { onNavigate: () => void }) {
         <p className="text-2xs text-[rgb(var(--color-text-secondary))]">No versions yet.</p>
       ) : (
         <ul aria-label="Recent versions">
-          {recent.map((node) => (
-            <li key={node.id}>
-              <button
-                type="button"
-                onClick={() => {
-                  onNavigate();
-                  void openSnapshotPreview(node.id);
-                }}
-                className="flex w-full min-w-0 items-baseline gap-2 rounded-control px-1.5 py-1 text-left hover:bg-fill-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]"
-                title={node.comment ? `Preview “${node.message.split(/\r?\n/, 1)[0]}”\n\n${node.comment}` : `Preview “${node.message}”`}
-                aria-label={`Preview version: ${node.message.split(/\r?\n/, 1)[0]}`}
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-xs text-[rgb(var(--color-text))]">{node.message.split(/\r?\n/, 1)[0]}</span>
-                  {node.comment && (
-                    <span className="block truncate text-2xs text-[rgb(var(--color-text-secondary))]" data-testid="recent-version-comment">{node.comment}</span>
-                  )}
-                </span>
-                <span className="shrink-0 text-2xs text-[rgb(var(--color-text-secondary))]">{formatRelativeDate(node.timestamp)}</span>
-              </button>
-            </li>
-          ))}
+          {recent.map((node) => {
+            const { name, comment } = plainVersion(node.message, node.comment, node.parents.length > 1);
+            return (
+              <li key={node.id}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onNavigate();
+                    void openSnapshotPreview(node.id);
+                  }}
+                  className="flex w-full min-w-0 items-baseline gap-2 rounded-control px-1.5 py-1 text-left hover:bg-fill-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]"
+                  title={comment ? `Preview “${name}”\n\n${comment}` : `Preview “${name}”`}
+                  aria-label={`Preview version: ${name}`}
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs text-[rgb(var(--color-text))]">{name}</span>
+                    {comment && (
+                      <span className="block truncate text-2xs text-[rgb(var(--color-text-secondary))]" data-testid="recent-version-comment">{comment}</span>
+                    )}
+                  </span>
+                  <span className="shrink-0 text-2xs text-[rgb(var(--color-text-secondary))]">{formatRelativeDate(node.timestamp)}</span>
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

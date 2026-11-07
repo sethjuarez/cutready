@@ -1,3 +1,5 @@
+import { savedAtSeconds, type SaveTimes } from "./saveTime";
+
 /** Every "Set aside" gets its own shelf, so several can wait side by side. */
 export const SET_ASIDE_SHELF_PREFIX = "cutready-setaside-";
 /** The single shelf older builds used for "Set aside". Still listed and restorable. */
@@ -17,7 +19,7 @@ export interface SetAsideShelf {
 /** What a shelf looks like from Draftline: only the parts this module reads. */
 export interface ShelfLike {
   id: string;
-  version: { time_seconds: number };
+  version: SaveTimes;
 }
 
 /**
@@ -68,7 +70,7 @@ export function setAsideShelves(shelves: ShelfLike[]): SetAsideShelf[] {
   return shelves
     .flatMap((shelf) => {
       const name = setAsideShelfName(shelf.id);
-      return name === null ? [] : [{ id: shelf.id, name, timeMs: shelf.version.time_seconds * 1000 }];
+      return name === null ? [] : [{ id: shelf.id, name, timeMs: savedAtSeconds(shelf.version) * 1000 }];
     })
     .sort((a, b) => b.timeMs - a.timeMs);
 }

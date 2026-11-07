@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { WorkspaceGraph, WorkspaceGraphNode, WorkspaceGraphRef } from "@draftline/client";
 import { buildTimeline, firstLine, pathTimeline, searchTimeline } from "../domain/history/timeline";
 import { mergeGraphPages } from "../services/versionHistory";
+import { savedAtSeconds } from "../domain/versioning/saveTime";
 
 function node(id: string, parents: string[], extra: Partial<WorkspaceGraphNode> = {}): WorkspaceGraphNode {
   return {
@@ -74,6 +75,36 @@ describe("mergeGraphPages", () => {
 });
 
 describe("buildTimeline", () => {
+  it("shows generated update versions in plain words, with what came in", () => {
+    const comment = "- #24 lead queue with wing-light hero (Dana)\n- Tighten intro (Lee)\n- …and 3 more";
+    const merge = (id: string, label: string, extra: Partial<WorkspaceGraphNode["version"]> = {}) =>
+      node(id, ["a", "x"], { version: { ...node(id, []).version, label, ...extra } });
+    const g = graph([
+      merge("n", "Brought in team updates", { comment }),
+      merge("o", "Merge updates from main"),
+      merge("u", "Combine the intro drafts"),
+    ], "n");
+    const entries = new Map(g.nodes.map((n) => [n.id, buildTimeline(graph([n], n.id), false)[0]]));
+    expect(entries.get("n")).toMatchObject({
+      name: "Brought in team updates",
+      comment: "#24 lead queue with wing-light hero (Dana) and 4 more",
+      teamUpdates: ["#24 lead queue with wing-light hero (Dana)", "Tighten intro (Lee)", "…and 3 more"],
+    });
+    expect(entries.get("o")).toMatchObject({ name: "Brought in team updates", comment: null });
+    expect(entries.get("o")?.teamUpdates).toBeUndefined();
+    // A merge someone named themselves keeps its name.
+    expect(entries.get("u")).toMatchObject({ name: "Combine the intro drafts" });
+  });
+
+  it("finds team updates by what came in", () => {
+    const g = graph([node("n", ["a", "x"], {
+      is_current: true,
+      version: { ...node("n", []).version, label: "Brought in team updates", comment: "- Wing-light hero (Dana)\n- Tighten intro (Lee)" },
+    })], "n");
+    expect(searchTimeline(buildTimeline(g, false), "dana wing").map((e) => e.id)).toEqual(["n"]);
+    expect(searchTimeline(buildTimeline(g, false), "lee intro").map((e) => e.id)).toEqual(["n"]);
+  });
+
   it("walks first parents from the current version, newest first", () => {
     const g = graph([
       node("m", ["c", "x"], { is_current: true }),
@@ -125,5 +156,22 @@ describe("buildTimeline", () => {
   it("falls back to the head node and stops on cycles", () => {
     const g = graph([node("a", ["b"], { is_head: true }), node("b", ["a"])], "missing");
     expect(buildTimeline(g, false).map((e) => e.id)).toEqual(["a", "b"]);
+  });
+});
+
+describe("save time after bringing in team updates", () => {
+  // Replaying an unsent save sets its recorded time to now; the author time keeps when it was made.
+  const rebased = { id: "r", label: "Outline", author: { name: "Ada" }, saved_by: { name: "Ada" }, time_seconds: 9_000, author_time_seconds: 1_000 };
+
+  it("shows a replayed save at its original time in History", () => {
+    const g = graph([node("r", [], { version: rebased } as never)], "r");
+    expect(buildTimeline(g, false)[0].timeSeconds).toBe(1_000);
+    const history = { paths: ["a.md"], entries: [{ entry: { version: rebased, parent_ids: [], is_head: true }, files: [] }], has_more: false, next_cursor: null } as never;
+    expect(pathTimeline(history, null, false)[0].timeSeconds).toBe(1_000);
+  });
+
+  it("falls back to the recorded time when there's no author time", () => {
+    expect(savedAtSeconds({ time_seconds: 9_000 })).toBe(9_000);
+    expect(savedAtSeconds({ time_seconds: 9_000, author_time_seconds: null })).toBe(9_000);
   });
 });

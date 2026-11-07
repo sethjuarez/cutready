@@ -19,7 +19,7 @@ const originalApp = useAppStore.getState();
 
 function startConflictMerge(source: string | null) {
   const noop = vi.fn(async () => undefined);
-  useAppStore.setState({ loadSketches: noop, loadStoryboards: noop, loadNotes: noop });
+  useAppStore.setState({ loadSketches: noop, loadStoryboards: noop, loadNotes: noop, loadChatArtifacts: noop });
   useSyncStore.setState({ refreshSyncStatus: noop, refreshIncomingCommits: noop });
   useVersioningStore.setState({
     loadVersions: noop,
@@ -28,11 +28,12 @@ function startConflictMerge(source: string | null) {
     checkDirty: noop,
     timelines: [{ name: "keynote", label: "Keynote", is_active: true, snapshot_count: 2, color_index: 0 }],
     isMerging: true,
-    mergeSource: "origin",
+    mergeSource: "team updates",
     mergeTarget: "incoming",
     mergeConflicts: [],
     draftlineMergeToken: { source } as never,
     draftlineMergeRemote: "origin",
+    draftlineMergeIncoming: [{ name: "#24 lead queue", comment: "", author: "Dana" }],
   });
 }
 
@@ -44,37 +45,18 @@ afterEach(() => {
   useAppStore.setState(originalApp, true);
 });
 
-describe("applyMergeResolution", () => {
-  it("merges resolved incoming saves under the approved name", async () => {
-    startConflictMerge(null);
-    const applied = useVersioningStore.getState().applyMergeResolution([{ path: "intro.sk", content: "{}" }]);
-    await vi.waitFor(() => expect(useMergeNameStore.getState().pending?.defaultName).toBe("Merge updates from Keynote"));
-    useMergeNameStore.getState().answer("Merge Ana's intro");
-    await expect(applied).resolves.toBe("merge123");
-    expect(merge.mock.calls[0][1]).toBe("Merge Ana's intro");
+describe("applyMergeResolution for team updates", () => {
+  it.each([null, "main"])("saves the resolved updates under the generated name without asking (source %s)", async (source) => {
+    startConflictMerge(source);
+    await expect(useVersioningStore.getState().applyMergeResolution([{ path: "intro.sk", content: "{}" }])).resolves.toBe("merge123");
+    expect(useMergeNameStore.getState().pending).toBeNull();
+    expect(merge.mock.calls[0][1]).toBe("Bring in team updates\n\n- #24 lead queue (Dana)");
     expect(useVersioningStore.getState().isMerging).toBe(false);
-  });
-
-  it("prefills base merges with the base name", async () => {
-    startConflictMerge("main");
-    const applied = useVersioningStore.getState().applyMergeResolution([]);
-    await vi.waitFor(() => expect(useMergeNameStore.getState().pending?.defaultName).toBe("Merge updates from main"));
-    useMergeNameStore.getState().answer("Merge updates from main");
-    await applied;
-  });
-
-  it("keeps the merge open and writes nothing when naming is cancelled", async () => {
-    startConflictMerge(null);
-    const applied = useVersioningStore.getState().applyMergeResolution([]);
-    await vi.waitFor(() => expect(useMergeNameStore.getState().pending).not.toBeNull());
-    useMergeNameStore.getState().answer(null);
-    await expect(applied).resolves.toBeNull();
-    expect(merge).not.toHaveBeenCalled();
-    expect(useVersioningStore.getState().isMerging).toBe(true);
+    expect(useToastStore.getState().toasts.map((toast) => toast.message)).toContain("Got 1 team update.");
   });
 
   it.each(["local_state_changed", "remote_race"])(
-    "tells the user the updates changed and merges nothing when Draftline rejects a stale token (%s)",
+    "tells the user the updates changed and brings in nothing when Draftline rejects a stale token (%s)",
     async (code) => {
       startConflictMerge(null);
       const loadVersions = vi.fn(async () => undefined);
@@ -82,10 +64,7 @@ describe("applyMergeResolution", () => {
       // A successful refresh clears syncError, as the real one does.
       useSyncStore.setState({ refreshSyncStatus: vi.fn(async () => useSyncStore.setState({ syncError: null })) });
       merge.mockRejectedValueOnce({ code, message: "token is stale" });
-      const applied = useVersioningStore.getState().applyMergeResolution([{ path: "intro.sk", content: "{}" }]);
-      await vi.waitFor(() => expect(useMergeNameStore.getState().pending).not.toBeNull());
-      useMergeNameStore.getState().answer("Merge Ana's intro");
-      await expect(applied).resolves.toBeNull();
+      await expect(useVersioningStore.getState().applyMergeResolution([{ path: "intro.sk", content: "{}" }])).resolves.toBeNull();
 
       expect(useSyncStore.getState().syncError).toBe(MERGE_UPDATES_CHANGED_MESSAGE);
       expect(useToastStore.getState().toasts.map((toast) => toast.message)).toContain(MERGE_UPDATES_CHANGED_MESSAGE);
@@ -96,13 +75,10 @@ describe("applyMergeResolution", () => {
     },
   );
 
-  it("passes other merge failures to the caller", async () => {
+  it("passes other failures to the caller", async () => {
     startConflictMerge(null);
     merge.mockRejectedValueOnce({ code: "invalid_merge_resolution", message: "bad" });
-    const applied = useVersioningStore.getState().applyMergeResolution([]);
-    await vi.waitFor(() => expect(useMergeNameStore.getState().pending).not.toBeNull());
-    useMergeNameStore.getState().answer("Merge");
-    await expect(applied).rejects.toMatchObject({ code: "invalid_merge_resolution" });
+    await expect(useVersioningStore.getState().applyMergeResolution([])).rejects.toMatchObject({ code: "invalid_merge_resolution" });
     expect(useVersioningStore.getState().isMerging).toBe(true);
   });
 });

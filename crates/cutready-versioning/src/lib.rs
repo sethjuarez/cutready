@@ -23,13 +23,7 @@ use serde::Serialize;
 use cutready_core::identity::{IdentitySource, ResolvedIdentity};
 use cutready_core::{Lock, LockGuard};
 
-const EXCLUDED_RUNTIME_PATHS: &[&str] = &[
-    ".chats",
-    ".cutready/recordings",
-    ".cutready/agent-state.db",
-    ".cutready/memory.json",
-    ".cutready/locks.json",
-];
+use runtime_ignore::EXCLUDED_RUNTIME_PATHS;
 
 const CUTREADY_CONTENT_EXTENSIONS: &[&str] = &[
     "sk", "sb", "md", "cv", "png", "jpg", "jpeg", "webp", "webm", "ogg", "oga", "mp3", "wav",
@@ -45,8 +39,9 @@ const CUTREADY_LARGE_FILE_THRESHOLD_BYTES: u64 = 50 * 1024 * 1024;
 
 pub mod naming;
 mod remote_credentials;
-pub mod repo_clone;
+pub mod repository;
 mod restore;
+pub mod runtime_ignore;
 mod sync;
 pub use naming::{namespaced_variation_name, CUTREADY_VARIATION_NAMESPACE};
 pub use remote_credentials::{cutready_remote_options, is_github_remote_url};
@@ -74,6 +69,8 @@ impl CutReadyDraftlineAdapter {
         } else {
             workspace.with_variation_namespace(CUTREADY_VARIATION_NAMESPACE)?
         };
+        // Best effort: a read-only or locked exclude file only costs noise in `git status`.
+        let _ = runtime_ignore::exclude_runtime_paths(root);
         Ok(Self { workspace })
     }
 

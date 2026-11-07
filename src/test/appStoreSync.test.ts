@@ -29,7 +29,9 @@ vi.mock("../services/githubSetup", () => ({
   getGitHubAuthStatus: (...args: unknown[]) => mockGetGitHubAuthStatus(...args),
 }));
 
-import { mergeNeedsDeveloperMessage, remoteSyncErrorMessage, useAppStore } from "../stores/appStore";
+import { remoteSyncErrorMessage, useAppStore } from "../stores/appStore";
+import { syncCopy } from "../domain/versioning";
+import { TEAM_UPDATES_SOURCE } from "../services/teamUpdates";
 import { useVersioningStore } from "../stores/versioningStore";
 import { useSyncStore } from "../stores/syncStore";
 import { GIT_INDEX_LOCKED_MESSAGE, SEND_OUTSIDE_NAMESPACE_MESSAGE } from "../services/draftlineErrors";
@@ -369,7 +371,7 @@ describe("appStore remote sync status", () => {
     expect(useSyncStore.getState().sendForReviewPrompt).toBeNull();
     expect(useToastStore.getState().toasts).toEqual([
       expect.objectContaining({
-        message: "Pull request #12 opened for review.",
+        message: "Sent for review ✓",
         type: "success",
         link: { label: "Open", url: "https://github.com/contoso/app/pull/12" },
       }),
@@ -496,6 +498,22 @@ describe("appStore remote sync status", () => {
     expect(useSyncStore.getState().shareUrl).toBeNull();
   });
 
+  it("doesn't claim a standalone share was published when the push fails", async () => {
+    mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
+    mockPublishDraftlineChanges.mockRejectedValueOnce(new Error("offline"));
+    useAppStore.setState({ currentProject: { root: "D:\\demo", name: "demo", repo_root: "D:\\demo" } });
+    useVersioningStore.setState({
+      timelines: [{ name: "main", label: "main", is_active: true, snapshot_count: 2, color_index: 0 }],
+    });
+    useSyncStore.setState({ currentRemote: { name: "origin", url: "https://github.com/contoso/app.git" } });
+    const show = vi.spyOn(useToastStore.getState(), "show");
+
+    await useSyncStore.getState().shareChanges();
+
+    expect(useSyncStore.getState().shareUrl).toBeNull();
+    expect(show).not.toHaveBeenCalledWith(expect.stringContaining("published"), expect.anything(), "success");
+  });
+
   it("publishes a standalone timeline directly", async () => {
     mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
     mockPublishDraftlineChanges.mockResolvedValueOnce(undefined);
@@ -617,6 +635,7 @@ describe("appStore remote sync status", () => {
     const cleanReport = {
       dirtyFiles: [],
       conflicts: [],
+      incoming: [],
       canMergeCleanly: true,
       syncStatus: { ahead: 1, behind: 2 },
       token: { source: "main" },
@@ -627,6 +646,7 @@ describe("appStore remote sync status", () => {
         loadSketches: vi.fn(async () => {}),
         loadStoryboards: vi.fn(async () => {}),
         loadNotes: vi.fn(async () => {}),
+        loadChatArtifacts: vi.fn(async () => {}),
         refreshIncomingCommits: vi.fn(async () => {}),
         loadVersions: vi.fn(async () => {}),
         loadGraphData: vi.fn(async () => {}),
@@ -637,6 +657,7 @@ describe("appStore remote sync status", () => {
         loadSketches: spies.loadSketches,
         loadStoryboards: spies.loadStoryboards,
         loadNotes: spies.loadNotes,
+        loadChatArtifacts: spies.loadChatArtifacts,
       });
       useVersioningStore.setState({
         loadVersions: spies.loadVersions,
@@ -684,7 +705,7 @@ describe("appStore remote sync status", () => {
       expect(mockMergeWithToken).not.toHaveBeenCalled();
     });
 
-    it("merges a clean base update and refreshes state", async () => {
+    it("brings in a clean base update without a name prompt and refreshes state", async () => {
       mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
       mockGetDraftlineSyncStatus.mockResolvedValue({ ahead: 1, behind: 0 });
       mockGetDraftlineBaseStatus.mockResolvedValue({ ahead: 2, behind: 0, base: "main" });
@@ -699,40 +720,17 @@ describe("appStore remote sync status", () => {
       });
       const spies = stubRefresh();
 
-      const update = useSyncStore.getState().getUpdatesFromBase();
-      await vi.waitFor(() => expect(useMergeNameStore.getState().pending).not.toBeNull());
-      expect(useMergeNameStore.getState().pending).toMatchObject({ source: "main", defaultName: "Merge updates from main" });
-      expect(mockMergeWithToken).not.toHaveBeenCalled();
-      useMergeNameStore.getState().answer("Merge updates from main\n\nPicked up the new intro");
-      await update;
+      const outcome = await useSyncStore.getState().getUpdatesFromBase();
 
+      expect(outcome).toEqual({ kind: "brought-in", count: 2 });
+      expect(useMergeNameStore.getState().pending).toBeNull();
       expect(mockPreflightDraftlineMergeBase).toHaveBeenCalledWith("origin");
-      expect(mockMergeWithToken).toHaveBeenCalledWith(cleanReport.token, "Merge updates from main\n\nPicked up the new intro", "origin");
+      expect(mockMergeWithToken).toHaveBeenCalledWith(cleanReport.token, "Bring in team updates", "origin");
       expect(useToastStore.getState().toasts).toEqual([
-        expect.objectContaining({ message: "Updates from main brought in.", type: "success" }),
+        expect.objectContaining({ message: "Got 2 team updates.", type: "success" }),
       ]);
       for (const spy of Object.values(spies)) expect(spy).toHaveBeenCalled();
       expect(useSyncStore.getState().baseStatus).toEqual({ ahead: 2, behind: 0, base: "main" });
-      expect(useSyncStore.getState().syncError).toBeNull();
-      expect(useSyncStore.getState().isSyncing).toBe(false);
-    });
-
-    it("doesn't merge from base when naming the merge is cancelled", async () => {
-      mockGetGitHubAuthStatus.mockResolvedValue({ connected: true });
-      mockGetDraftlineSyncStatus.mockResolvedValue({ ahead: 1, behind: 0 });
-      mockGetDraftlineBaseStatus.mockResolvedValue({ ahead: 1, behind: 2, base: "main" });
-      mockPreflightDraftlineMergeBase.mockResolvedValueOnce(cleanReport);
-      useAppStore.setState({ currentProject: hybridProject });
-      useSyncStore.setState({ currentRemote: remote, baseStatus: { ahead: 1, behind: 2, base: "main" } });
-      stubRefresh();
-
-      const update = useSyncStore.getState().getUpdatesFromBase();
-      await vi.waitFor(() => expect(useMergeNameStore.getState().pending).not.toBeNull());
-      useMergeNameStore.getState().answer(null);
-      await update;
-
-      expect(mockMergeWithToken).not.toHaveBeenCalled();
-      expect(useToastStore.getState().toasts).toEqual([]);
       expect(useSyncStore.getState().syncError).toBeNull();
       expect(useSyncStore.getState().isSyncing).toBe(false);
     });
@@ -760,7 +758,7 @@ describe("appStore remote sync status", () => {
       expect(mockGetDraftlineSyncStatus).toHaveBeenCalled();
       expect(spies.loadTimelines).toHaveBeenCalled();
       expect(spies.loadGraphData).toHaveBeenCalled();
-      expect(useSyncStore.getState().syncError).toBe(mergeNeedsDeveloperMessage("main"));
+      expect(useSyncStore.getState().syncError).toBe(syncCopy.sharedUpdatesNeedDeveloper);
       expect(useVersioningStore.getState().isMerging).toBe(false);
       expect(useSyncStore.getState().isSyncing).toBe(false);
     });
@@ -789,7 +787,7 @@ describe("appStore remote sync status", () => {
       expect(mockMergeWithToken).not.toHaveBeenCalled();
       const state = useVersioningStore.getState();
       expect(state.isMerging).toBe(true);
-      expect(state.mergeSource).toBe("main");
+      expect(state.mergeSource).toBe(TEAM_UPDATES_SOURCE);
       expect(state.mergeConflicts).toEqual(conflicts);
       expect(state.draftlineMergeToken).toEqual({ source: "main" });
       expect(state.draftlineMergeRemote).toBe("origin");

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { AlertTriangle, ArrowDown, GitMerge, RefreshCw, X } from "lucide-react";
 import { classifySyncError } from "../../domain/versioning";
+import { syncCopy } from "../../domain/versioning/syncCopy";
 import { isDraftlineGuidanceMessage } from "../../services/draftlineErrors";
 import { isContributorIdentityRequired } from "../../services/identity";
 import { startGetUpdates } from "../../services/preAction";
@@ -35,6 +36,7 @@ export function RemoteStatus() {
   }
 
   const behind = syncStatus?.behind ?? 0;
+  const ahead = syncStatus?.ahead ?? 0;
   const baseBehind = isHybrid && baseStatus ? baseStatus.behind : 0;
   const error = syncError
     ? classifySyncError(syncError, { isIdentityRequired: isContributorIdentityRequired, isGuidance: isDraftlineGuidanceMessage })
@@ -47,8 +49,8 @@ export function RemoteStatus() {
           aria-hidden="true"
           className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${error ? "bg-warning" : "bg-success"}`}
         />
-        <span className="min-w-0 flex-1 truncate" title={currentRemote.url}>
-          {error ? "Sync needs attention" : "Connected"} · {currentRemote.name}
+        <span className="min-w-0 flex-1 truncate" title={currentRemote.url} data-testid="sync-status-pill">
+          {error ? syncCopy.needsAttention : isSyncing ? syncCopy.syncing : syncStatus ? syncCopy.status({ ahead, behind }) : syncCopy.checking}
         </span>
         <button
           type="button"
@@ -69,7 +71,7 @@ export function RemoteStatus() {
             aria-expanded={showIncoming}
             className="min-w-0 flex-1 truncate text-left text-2xs text-[rgb(var(--color-text))] hover:underline"
           >
-            {behind} incoming version{behind === 1 ? "" : "s"} from collaborators
+            {syncCopy.teamHasUpdates(behind)}
           </button>
           <button type="button" onClick={() => startGetUpdates(pullFromRemote)} disabled={isSyncing} className={linkButtonClass}>
             <ArrowDown className="h-3 w-3" aria-hidden="true" />
@@ -81,14 +83,14 @@ export function RemoteStatus() {
       {baseBehind > 0 && baseStatus && (
         <div className="mt-1.5 flex items-center gap-1">
           <span className="min-w-0 flex-1 truncate text-2xs text-[rgb(var(--color-text))]">
-            {baseBehind} new change{baseBehind === 1 ? "" : "s"} on {baseStatus.base}
+            {syncCopy.sharedUpdates(baseBehind)}
           </span>
           <button
             type="button"
             onClick={() => startGetUpdates(getUpdatesFromBase)}
             disabled={isSyncing}
             className={linkButtonClass}
-            title={`Get updates from ${baseStatus.base}`}
+            title={syncCopy.getSharedUpdates}
           >
             <GitMerge className="h-3 w-3" aria-hidden="true" />
             Get updates
