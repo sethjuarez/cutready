@@ -71,7 +71,7 @@ The scripts used in this slice are in `src-tauri/examples/live-take-scripts/`:
 3. **Analyze.** Marker runs are detected in the take (25 fps CFR), matched to the log, and `fit_epoch` maps hrtime to video time. The first visibly changed frame in the action's ROI is the observed landmark. A take whose dispatch frame falls under a marker run is rejected and recorded again.
 4. **Plan.** `anchor_actions` and `plan_timing` produce an EDL of play, freeze and drop segments. When the plan needs `InsertSilence`, real silence is spliced into the WAV at the planned sample and later words are shifted.
 5. **Render.** The EDL becomes a frame map: one source frame index per output frame. One ffmpeg process decodes the take to raw frames, Rust writes the mapped frames in order to a second ffmpeg that encodes H.264 at exactly the take fps and muxes the WAV as AAC. Every output frame is a copy of a decoded source frame, so timing is frame-exact without depending on filter-graph rounding (`trim`/`tpad`/`select`).
-6. **Audit.** Action frames are detected again in the **final MP4**, and word times come from the final audio timeline. Each cue's drift is the observed frame time minus the cue time.
+6. **Audit.** Action frames are detected again in the **final MP4**, and word times come from the final audio timeline. Each cue's drift is the observed frame time minus the cue time. This is a render-consistency audit: it searches where the plan put each action and reuses the analysis ROI and detector, so it proves the render matches the plan, not that the raw landmark was right.
 7. **Write `take.json`.** It holds the script, words, action log, epoch fit, plan, EDL, splices, observed landmarks, audit and stage timings.
 
 ### Hiding the markers

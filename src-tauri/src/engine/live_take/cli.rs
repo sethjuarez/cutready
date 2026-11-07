@@ -67,12 +67,15 @@ pub async fn run_cli(args: CliArgs) -> Result<i32> {
     let root = repo_root();
     let endpoint = std::env::var("SPEECH_ENDPOINT").unwrap_or_default();
     let token = std::env::var("SPEECH_TOKEN").ok().filter(|t| !t.is_empty());
+    // The sidecar runs in its own directory, so every path it sees must be
+    // absolute.
+    let abs = |p: PathBuf| std::path::absolute(&p).unwrap_or(p);
     let opts = LiveTakeOptions {
-        script_path: args.script,
-        out_root: args.out.unwrap_or_else(|| root.join(".live-take-out")),
-        sidecar_dir: args
+        script_path: abs(args.script),
+        out_root: abs(args.out.unwrap_or_else(|| root.join(".live-take-out"))),
+        sidecar_dir: abs(args
             .sidecar
-            .unwrap_or_else(|| root.join("playwright-sidecar")),
+            .unwrap_or_else(|| root.join("playwright-sidecar"))),
         headless: !args.headful,
         speech: SpeechAuth { endpoint, token },
         max_takes: args.max_takes,

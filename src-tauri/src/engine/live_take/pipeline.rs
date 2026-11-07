@@ -1,5 +1,5 @@
 //! The live-take pipeline: narration → recorded take → frame analysis →
-//! timing plan → silence splice → frame-exact render → independent audit.
+//! timing plan → silence splice → frame-exact render → render-consistency audit.
 //!
 //! Coordinate conventions (see `docs/video/live-take-learnings.md`):
 //! * *Raw* frames index the sidecar's VP8 recording from its first frame.
@@ -207,6 +207,26 @@ fn out_dir_for(root: &Path, name: &str) -> PathBuf {
     root.join(format!("{slug}-{stamp}"))
 }
 
+/// Creates `base`, or `base-2`, `base-3`, ... if it already exists, so two
+/// runs in the same second never share a folder.
+fn create_unique_dir(base: &Path) -> Result<PathBuf> {
+    if let Some(parent) = base.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    for n in 1u32.. {
+        let mut dir = base.to_path_buf();
+        if n > 1 {
+            dir.as_mut_os_string().push(format!("-{n}"));
+        }
+        match std::fs::create_dir(&dir) {
+            Ok(()) => return Ok(dir),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e).with_context(|| format!("create {}", dir.display())),
+        }
+    }
+    unreachable!("u32 suffixes exhausted")
+}
+
 /// Records takes until one is usable (at most `opts.max_takes`). Rejected
 /// takes keep their folder, with `rejected.txt` saying why.
 pub async fn run_live_take(opts: &LiveTakeOptions) -> Result<LiveTakeOutcome> {
@@ -222,8 +242,11 @@ pub async fn run_live_take(opts: &LiveTakeOptions) -> Result<LiveTakeOutcome> {
                 e.downcast_ref::<TakeRejected>(),
                 e.downcast_ref::<RejectedIn>(),
             ) {
-                (Some(r), Some(dir)) if attempt < max => {
+                (Some(r), Some(dir)) => {
                     let _ = std::fs::write(dir.0.join("rejected.txt"), r.to_string());
+                    if attempt == max {
+                        return Err(e);
+                    }
                     rejected.push((dir.0.clone(), r.to_string()));
                 }
                 _ => return Err(e),
@@ -258,7 +281,7 @@ async fn run_take_once(opts: &LiveTakeOptions, attempt: u32) -> Result<LiveTakeO
     if attempt > 1 {
         dir.as_mut_os_string().push(format!("-take{attempt}"));
     }
-    std::fs::create_dir_all(&dir)?;
+    let dir = create_unique_dir(&dir)?;
     analyze_and_render(opts, &script, &script_dir, &dir, &mut stages)
         .await
         .map_err(|e| {
@@ -471,7 +494,10 @@ async fn analyze_and_render(
     })?;
     stages.mark("render");
 
-    // 7. Audit from the final MP4 alone (plus the original TTS audio).
+    // 7. Render-consistency audit: re-detect each action in the final MP4
+    // (searching where the plan put it, with the analysis ROI) and compare
+    // against the cue words in the final audio. It shares the analysis
+    // detector, so it can't catch a wrong raw landmark.
     let out_pts = frame_pts(&mp4)?;
     let out_first = check_cadence(&out_pts, FPS.frame_duration(), Micros(1_000))?;
     if out_pts.len() as FrameIndex != plan.output_frame_count || out_first != Micros::ZERO {

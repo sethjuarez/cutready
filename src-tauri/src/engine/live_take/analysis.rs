@@ -313,9 +313,10 @@ pub fn first_change(
             d > threshold
         })
         .collect();
-    for w in 0..changed.len() {
-        let end = (w + persist).min(changed.len());
-        if changed[w..end].iter().all(|&c| c) && (end - w == persist || end == changed.len()) {
+    for w in 0..=changed.len().saturating_sub(persist) {
+        let window = &candidates[w..w + persist];
+        let consecutive = window.windows(2).all(|p| p[1] == p[0] + 1);
+        if consecutive && changed[w..w + persist].iter().all(|&c| c) {
             found = Some(candidates[w]);
             break;
         }
@@ -508,6 +509,15 @@ mod tests {
         );
         // No change in range.
         let d = first_change(&f, 0, 1, 4, roi, &[], &cfg);
+        assert_eq!(d.frame, None);
+        // A lone changed last frame is not a persistent change.
+        let tail = frames(&[10, 10, 10, 60], 1, 1);
+        let d = first_change(&tail, 0, 1, 4, Roi::full(1, 1), &[], &cfg);
+        assert_eq!(d.frame, None);
+        // Changed frames on either side of a marker run aren't consecutive.
+        let gap = frames(&[10, 10, 60, 200, 200, 10], 1, 1);
+        let ex = [false, false, false, true, true, false];
+        let d = first_change(&gap, 0, 1, 6, Roi::full(1, 1), &ex, &cfg);
         assert_eq!(d.frame, None);
     }
 
