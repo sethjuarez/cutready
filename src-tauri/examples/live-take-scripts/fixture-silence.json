@@ -1,0 +1,66 @@
+{
+  "schema": "cutready.live-take-script.v1",
+  "name": "fixture-silence",
+  "narration": "Watch closely: we open the panel, type a greeting, and scroll to the footer, all in one breath.",
+  "voice": "en-US-AvaMultilingualNeural",
+  "url": "../../../playwright-sidecar/spike/fixture.html",
+  "ready": {
+    "selector": "#open"
+  },
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "steps": [
+    {
+      "id": "open-panel",
+      "kind": "click",
+      "selectors": [
+        "[data-testid=open-panel]",
+        "#open"
+      ],
+      "cue": {
+        "tokens": [
+          "open",
+          "the",
+          "panel"
+        ]
+      },
+      "postcondition": {
+        "selector": "#panel"
+      }
+    },
+    {
+      "id": "type-greeting",
+      "kind": "type",
+      "selectors": [
+        "#name"
+      ],
+      "text": "hello there, this greeting is long enough to need extra time",
+      "cue": {
+        "tokens": [
+          "type"
+        ]
+      },
+      "postcondition": {
+        "selector": "#name",
+        "value": "hello there, this greeting is long enough to need extra time"
+      }
+    },
+    {
+      "id": "scroll-footer",
+      "kind": "scroll",
+      "dy": 900,
+      "cue": {
+        "tokens": [
+          "scroll"
+        ]
+      },
+      "postcondition": {
+        "scrollYAtLeast": 800
+      }
+    }
+  ]
+}
+
+
