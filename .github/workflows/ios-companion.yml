@@ -2,10 +2,6 @@ name: iOS Companion
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - "ios/**"
-      - ".github/workflows/ios-companion.yml"
   pull_request:
     paths:
       - "ios/**"
