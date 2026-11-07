@@ -1,6 +1,6 @@
 // The home screen: greeting, prompt composer, quick starts, continue card and recent workspaces.
 import { useEffect, useState } from "react";
-import { Download, Plus } from "lucide-react";
+import { ChevronDown, Download, FolderGit2, Plus } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { useVersioningStore } from "../../stores/versioningStore";
 import { getContributorIdentity } from "../../services/identity";
@@ -8,6 +8,8 @@ import { resolveProjectSelection, timeOfDayGreeting } from "../../utils/home";
 import { RecentWorkspaceList } from "../RecentWorkspaceList";
 import { ContinueCard } from "./ContinueCard";
 import { HomeComposer } from "./HomeComposer";
+import { ContextMenu } from "../ContextMenu";
+import { NewInRepoForm } from "./NewInRepoForm";
 import { CloneWorkspaceForm, NewWorkspaceForm } from "./NewWorkspaceForms";
 import { QuickStartCards } from "./QuickStartCards";
 import { useHomeActions } from "./useHomeActions";
@@ -40,7 +42,8 @@ export function HomeView() {
   const actions = useHomeActions();
   const firstName = useFirstName();
   const [projectPath, setProjectPath] = useState<string | null>(null);
-  const [form, setForm] = useState<"new" | "clone" | null>(null);
+  const [form, setForm] = useState<"new" | "existing-repo" | "clone" | null>(null);
+  const [newMenu, setNewMenu] = useState<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     void loadRecentProjects();
@@ -87,9 +90,30 @@ export function HomeView() {
       <div className="mb-2.5 mt-8 flex items-baseline justify-between gap-3">
         <h2 className="text-sm font-semibold">Recent workspaces</h2>
         <div className="flex items-center gap-4">
-          <button type="button" onClick={() => setForm(form === "new" ? null : "new")} aria-expanded={form === "new"} className={linkButton}>
-            <Plus aria-hidden="true" className="h-3.5 w-3.5" />New
+          <button
+            type="button"
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              setNewMenu(newMenu ? null : { x: rect.left, y: rect.bottom + 4 });
+            }}
+            // Keep the menu's outside-click handler from closing it before this toggles it.
+            onMouseDown={(e) => { if (newMenu) e.nativeEvent.stopPropagation(); }}
+            aria-haspopup="menu"
+            aria-expanded={newMenu !== null}
+            className={linkButton}
+          >
+            <Plus aria-hidden="true" className="h-3.5 w-3.5" />New<ChevronDown aria-hidden="true" className="h-3.5 w-3.5" />
           </button>
+          {newMenu && (
+            <ContextMenu
+              position={newMenu}
+              onClose={() => setNewMenu(null)}
+              items={[
+                { label: "New workspace", icon: <Plus className="h-3.5 w-3.5" />, action: () => setForm("new") },
+                { label: "New in existing repo…", icon: <FolderGit2 className="h-3.5 w-3.5" />, action: () => setForm("existing-repo") },
+              ]}
+            />
+          )}
           <button type="button" onClick={() => setForm(form === "clone" ? null : "clone")} aria-expanded={form === "clone"} className={linkButton}>
             <Download aria-hidden="true" className="h-3.5 w-3.5" />Clone
           </button>
@@ -99,6 +123,7 @@ export function HomeView() {
         </div>
       </div>
       {form === "new" && <NewWorkspaceForm chooseFolder={actions.chooseFolder} onClose={() => setForm(null)} />}
+      {form === "existing-repo" && <NewInRepoForm chooseFolder={actions.chooseFolder} onClose={() => setForm(null)} />}
       {form === "clone" && <CloneWorkspaceForm chooseFolder={actions.chooseFolder} onClose={() => setForm(null)} />}
       <div className={form ? "mt-3" : undefined}>
         {loading && recentProjects.length === 0 ? (

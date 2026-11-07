@@ -14,6 +14,33 @@ for example `contoso-app/cutready/`. Business users edit it in CutReady;
 developers edit and commit it with plain Git or Copilot. CutReady is a guest:
 it never takes over the repository.
 
+## Starting a Project in a Repository
+
+From **Home**, open **New** → **New in existing repo…**:
+
+1. **Repository**: a Git URL (for example
+   `https://github.com/org/repo.git`) or a local repository path.
+2. **Download to**: the folder the repository is downloaded into, as
+   `<folder>/<repo>`.
+3. **Workspace name**: the CutReady folder created inside the repository,
+   for example `<folder>/<repo>/cutready`.
+
+Choose **Download & create**. CutReady downloads the whole repository,
+including its history, then creates the folder and opens it. If the
+repository already has a CutReady project, CutReady opens that folder instead
+and tells you. If the name you picked is taken, change it and choose
+**Create workspace**; the repository isn't downloaded again.
+
+To work in a repository already on your computer, use **Open folder…**, pick
+the repository, and choose **Create cutready/**.
+
+**Clone** on Home also opens the repository's CutReady folder when it has one.
+
+<Aside type="caution">
+  Repositories that use Git LFS can't be downloaded from CutReady yet. Clone
+  them with Git, then use **Open folder…**.
+</Aside>
+
 ## How CutReady Detects It
 
 CutReady treats a project as **hybrid** when:
@@ -76,8 +103,8 @@ connection in **Settings** → **Repository**.
 
 ## Get Updates
 
-When your `cutready/*` branch is behind the base branch, the Sync Bar shows
-**Get updates from \<base\>**. This brings in the latest base, including
+When your `cutready/*` branch is behind the base branch, the timeline menu in
+the title bar shows **Get updates from \<base\>**. This brings in the latest base, including
 developer commits.
 
 | Conflict location | What happens |

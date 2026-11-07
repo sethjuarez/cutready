@@ -11,6 +11,7 @@ import type { Sketch, SketchSummary, NoteSummary, StoryboardSummary } from "./ty
 import type { ProjectView } from "./types/project";
 import type { AgentEvent, AppEvents } from "./ipc/events";
 import { isRecordingMockCommand, mockRecordingInvoke } from "./devMockRecording";
+import { isRepoCloneMockCommand, mockRepoCloneInvoke } from "./devMockRepoClone";
 
 const MOCK_PROJECT: ProjectView = {
   root: "C:/mock-project",
@@ -176,6 +177,7 @@ function mockResolvedIdentity() {
 /** Mock handler for Tauri invoke calls */
 function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
   if (isRecordingMockCommand(cmd)) return mockRecordingInvoke(cmd, args);
+  if (isRepoCloneMockCommand(cmd)) return mockRepoCloneInvoke(cmd, args);
   // Check for E2E overrides first
   const overrides = (typeof window !== "undefined" && (window as any).__MOCK_OVERRIDES__) || _overrides;
   if (cmd in overrides) return overrides[cmd];
@@ -458,6 +460,7 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       };
     }
     case "delete_variation":
+    case "delete_shelf":
       return null;
     case "get_changes":
       return { files: [], diff: null };
@@ -488,9 +491,6 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         id: (args as { request?: { shelf_id?: string } })?.request?.shelf_id ?? "cutready-stash",
         version: mockSavedVersion("shelf456shelf456shelf456shelf456shelf456", "Shelved changes"),
       };
-    case "delete_shelf":
-    case "clone_from_url":
-      return null;
     case "preflight_apply_shelf":
       return { overlapping_files: [], dirty_files: [] };
     case "restore_version_as_new_save":

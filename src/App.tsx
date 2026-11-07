@@ -23,6 +23,7 @@ import { useSyncStore } from "./stores/syncStore";
 import { useToastStore } from "./stores/toastStore";
 import { useUpdateStore } from "./stores/updateStore";
 import { createCoalescedRefresh } from "./services/coalescedRefresh";
+import { openStartupProject as runStartupProject } from "./services/startupProject";
 
 function App() {
   useTheme();
@@ -44,27 +45,18 @@ function App() {
       if (cancelled) return;
       if (deepLinkUrl) return;
 
-      const startupProject = await invoke<string | null>("get_startup_project_path").catch(() => null);
+      const store = useAppStore.getState;
+      await runStartupProject({
+        startupPath: () => invoke<string | null>("get_startup_project_path"),
+        openProject: (path) => store().openProject(path),
+        hasOpenProject: () => Boolean(store().currentProject),
+        lastError: () => store().error,
+        clearError: () => store().clearError(),
+        loadRecentProjects: () => store().loadRecentProjects(),
+        removeRecentProject: (path) => store().removeRecentProject(path),
+        isCancelled: () => cancelled,
+      });
       if (cancelled) return;
-
-      const persistedProject = localStorage.getItem("cutready:lastProject");
-      const projectToOpen = startupProject || persistedProject;
-      if (projectToOpen) {
-        await useAppStore.getState().openProject(projectToOpen);
-        if (cancelled) return;
-        // If auto-reopening the project failed (e.g. the folder was moved or
-        // deleted), drop the stale persisted pointer and fall back to the recent
-        // list instead of surfacing an error and re-failing on every launch.
-        if (!useAppStore.getState().currentProject) {
-          if (!startupProject && persistedProject) {
-            localStorage.removeItem("cutready:lastProject");
-          }
-          useAppStore.getState().clearError();
-          await useAppStore.getState().loadRecentProjects();
-        }
-      } else {
-        useAppStore.getState().loadRecentProjects();
-      }
       if (import.meta.env.DEV && import.meta.env.VITE_CUTREADY_STARTUP_VIEW === "settings") {
         useAppStore.getState().setView("settings");
       }

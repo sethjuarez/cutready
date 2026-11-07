@@ -15,6 +15,7 @@ import { recordActivityEntries } from "../services/telemetry";
 import { useToastStore } from "./toastStore";
 import { beginProjectChange, isHandledSaveError, loadDocument, MAIN_EDITOR, readDocument, saveDocument, type SaveOptions } from "../services/documentSaves";
 import { getStoryboardSketchPaths } from "../utils/storyboard";
+import { workspaceIpc } from "../ipc/workspace";
 import type { ProjectView, ProjectEntry, RecentProject } from "../types/project";
 import type {
   Sketch,
@@ -1883,13 +1884,12 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
   cloneFromUrl: async (url, destPath) => {
     set({ loading: true });
     try {
-      await invoke("clone_from_url", { url, dest: destPath });
-      // Open the cloned project
-      await get().openProject(destPath);
+      const folder = await workspaceIpc.cloneFromUrl(url, destPath);
+      await get().openProject(folder);
       return true;
     } catch (err) {
       console.error("Failed to clone:", err);
-      set({ error: String(err) });
+      set({ error: errorMessage(err) });
       return false;
     } finally {
       set({ loading: false });

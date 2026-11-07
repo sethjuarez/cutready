@@ -84,6 +84,13 @@ pub trait PromptyHost: Send + Sync {
         project_root: &Path,
         user_messages: &[String],
     ) -> Vec<ResolvedProjectReference>;
+
+    /// Where debug builds write Prompty traces for a run, or `None` to skip
+    /// tracing. The host resolves it: a project's `.git` may belong to an
+    /// enclosing repository, so the adapter must never derive it itself.
+    fn trace_dir(&self, _repo_root: &Path, _project_root: &Path) -> Option<std::path::PathBuf> {
+        None
+    }
 }
 
 /// Durable run-state persistence for the Prompty engine.

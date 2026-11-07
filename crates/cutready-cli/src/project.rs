@@ -8,7 +8,7 @@ use cutready_core::edit_ops::{self, ContentEditError};
 use cutready_core::edit_session::{kind_of, Applied, EditSession, Expected, ReviewError};
 use cutready_core::{Clock, Files, OpLogStore, PortErrorKind};
 use cutready_desktop_io::repo_lock::RepoLock;
-use cutready_desktop_io::state_dir::{enclosing_git_dir, git_state_dir, OP_LOG_FILENAME};
+use cutready_desktop_io::state_dir::{enclosing_git_dir, git_state_dir, is_git_dir, OP_LOG_FILENAME};
 use cutready_desktop_io::{SqliteOpLogStore, StdFiles};
 use serde_json::Value;
 
@@ -86,7 +86,7 @@ impl Project {
                 root.display()
             )));
         }
-        if !root.join(".git").is_dir() && enclosing_git_dir(&root).is_none() {
+        if !is_git_dir(&root.join(".git")) && enclosing_git_dir(&root).is_none() {
             return Err(Failure::other(format!(
                 "{} is not in a git repository; open it in CutReady first",
                 root.display()

@@ -659,9 +659,9 @@ fn refuse_unclaimed_folder(root: &Path) -> Result<(), ProjectError> {
 }
 
 /// The work-tree root of the Git repository holding `path`, if any.
-fn git_repository_root(path: &Path) -> Option<PathBuf> {
+pub(crate) fn git_repository_root(path: &Path) -> Option<PathBuf> {
     path.ancestors()
-        .find(|dir| dir.join(".git").exists())
+        .find(|dir| cutready_desktop_io::state_dir::has_own_repository(dir))
         .map(Path::to_path_buf)
 }
 
@@ -681,6 +681,7 @@ pub fn open_repo_with(
     root: &Path,
     adopt_unrecognized: bool,
 ) -> Result<(RepoView, Vec<ProjectEntry>), ProjectError> {
+    crate::engine::stray_git::repair_before_open(root)?;
     let renamed = if root.is_dir() {
         // A root project whose content a commit moved into a subfolder. Only a
         // prompt: the user may keep the root (`adopt_unrecognized`), and a root
@@ -2325,8 +2326,9 @@ pub fn migrate_legacy_chat_sessions(
 
 // ── Sidebar order manifest ──────────────────────────────────────────
 
-use cutready_desktop_io::state_dir::enclosing_git_dir;
-pub use cutready_desktop_io::state_dir::{git_state_dir, git_state_location, hybrid_git_root};
+pub use cutready_desktop_io::state_dir::{
+    folder_git_location, git_state_dir, git_state_location, hybrid_git_root,
+};
 
 pub const REPO_SETTINGS_FILE: &str = ".cutready/settings.json";
 
@@ -2445,17 +2447,6 @@ pub fn relocate_project_state(
     }
 
     Ok(())
-}
-
-/// The git dir holding a CutReady folder and the folder's path relative to
-/// the work tree (empty at the root). Works for standalone, hybrid, and
-/// linked-worktree folders alike.
-pub fn folder_git_location(root: &Path) -> Option<(PathBuf, PathBuf)> {
-    let dot_git = root.join(".git");
-    if dot_git.is_dir() {
-        return Some((std::fs::canonicalize(dot_git).ok()?, PathBuf::new()));
-    }
-    enclosing_git_dir(root)
 }
 
 /// The local runtime state directory for the CutReady folder at `folder`
@@ -2625,7 +2616,7 @@ fn only_holds(dir: &Path, keep: &Path) -> bool {
 }
 
 /// Remove `dir` and its ancestors while they are empty, stopping before `stop`.
-fn remove_empty_dirs(dir: Option<&Path>, stop: Option<&Path>) {
+pub(crate) fn remove_empty_dirs(dir: Option<&Path>, stop: Option<&Path>) {
     let mut current = dir;
     while let Some(path) = current {
         if Some(path) == stop || std::fs::remove_dir(path).is_err() {

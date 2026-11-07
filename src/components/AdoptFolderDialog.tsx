@@ -21,6 +21,8 @@ export function AdoptFolderDialog() {
   const inRepository = prompt.repository !== null;
   const isRepositoryRoot = inRepository && samePath(prompt.repository ?? "", prompt.folder);
   const offerSuggested = !samePath(prompt.suggested, prompt.folder);
+  // Using a repository root as is would track the whole repo instead of a CutReady folder in it.
+  const offerAdopt = !(isRepositoryRoot && offerSuggested);
 
   if (prompt.movedTo) {
     return (
@@ -63,9 +65,13 @@ export function AdoptFolderDialog() {
           <p>
             {!offerSuggested
               ? `Use "${folder}" as it is? CutReady will track the files in it.`
-              : prompt.suggestedExists
-                ? `Open the existing "${suggested}" folder, or use "${folder}" as it is.`
-                : `Create a "${suggested}" folder for the demo, or use "${folder}" as it is.`}
+              : !offerAdopt
+                ? prompt.suggestedExists
+                  ? `Open the existing "${suggested}" folder.`
+                  : `Create a "${suggested}" folder for the demo. Your code stays as it is.`
+                : prompt.suggestedExists
+                  ? `Open the existing "${suggested}" folder, or use "${folder}" as it is.`
+                  : `Create a "${suggested}" folder for the demo, or use "${folder}" as it is.`}
           </p>
         </div>
       }
@@ -76,12 +82,16 @@ export function AdoptFolderDialog() {
           variant: "secondary",
           onSelect: () => resolve("cancel"),
         },
-        {
-          id: "adopt",
-          label: `Use ${folder} as is`,
-          variant: offerSuggested ? "secondary" : "primary",
-          onSelect: () => resolve("adopt"),
-        },
+        ...(offerAdopt
+          ? [
+              {
+                id: "adopt",
+                label: `Use ${folder} as is`,
+                variant: offerSuggested ? ("secondary" as const) : ("primary" as const),
+                onSelect: () => resolve("adopt"),
+              },
+            ]
+          : []),
         ...(offerSuggested
           ? [
               {
