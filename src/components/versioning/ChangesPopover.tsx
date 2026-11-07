@@ -8,7 +8,7 @@ import { PowerMenu } from "./PowerMenu";
 import { RecentVersions } from "./RecentVersions";
 import { RemoteStatus } from "./RemoteStatus";
 import { SendSection } from "./SendSection";
-import { useAnchoredPopover } from "./useAnchoredPopover";
+import { useAnchoredPopover } from "../../hooks/useAnchoredPopover";
 import { VersionForm } from "./VersionForm";
 
 const POPOVER_WIDTH = 360;

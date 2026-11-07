@@ -1,7 +1,13 @@
 // Typed wrappers for workspace folder helpers used by the home screen, and for importing files.
 import { Channel, invoke } from "../services/tauri";
 import type { buildProviderConfig } from "../utils/providerConfig";
-import type { ClonedRepository, CloneProgressEvent, InitProjectInRepositoryResult } from "@draftline/client";
+import type {
+  ClonedRepository,
+  CloneProgressEvent,
+  InitProjectInRepositoryResult,
+  ProjectSettings,
+  RepositoryInspection,
+} from "@draftline/client";
 
 export const workspaceIpc = {
   /** The parent folder last used to create, clone or open a workspace, if any. */
@@ -23,6 +29,16 @@ export const workspaceIpc = {
   /** Creates CutReady folder `name` inside `parent` and records it in `.draftline`; commits nothing. */
   createProjectInRepository: (parent: string, name: string, baseBranch: string | null = null) =>
     invoke<InitProjectInRepositoryResult>("init_project_in_repository_for_project", { parent, name, baseBranch }),
+  /** Looks at a repository URL or local checkout before downloading it; changes nothing. */
+  inspectRepositoryForProject: (location: string) => invoke<RepositoryInspection>("inspect_repository_for_project", { location }),
+  /** What the open hybrid project's `.draftline` records. */
+  readProjectSettings: (workspacePath: string) =>
+    invoke<ProjectSettings>("project_settings", { request: { workspace_path: workspacePath } }),
+  /** Saves new project settings as their own version; null clears one. */
+  saveProjectSettings: (workspacePath: string, baseBranch: string | null, commitTemplate: string | null) =>
+    invoke<ProjectSettings>("update_project_settings", {
+      request: { workspace_path: workspacePath, base_branch: baseBranch, commit_template: commitTemplate },
+    }),
 };
 
 export interface CloneRequest {

@@ -51,11 +51,20 @@ pub async fn clone_from_url(url: String, dest: String) -> Result<String, CmdErro
 }
 
 fn opened_folder(adapter: &CutReadyDraftlineAdapter) -> String {
-    adapter
-        .root()
-        .join(adapter.scope())
-        .to_string_lossy()
-        .into_owned()
+    folder_in_repository(adapter.root(), adapter.scope())
+}
+
+/// The folder to open: the repository root, or its CutReady folder. Git
+/// reports the root with a trailing separator; keep it off the opened path so
+/// recents don't get a second entry for the same folder.
+fn folder_in_repository(root: &std::path::Path, scope: &std::path::Path) -> String {
+    let folder = root.join(scope).to_string_lossy().into_owned();
+    let trimmed = folder.trim_end_matches(['/', '\\']);
+    if trimmed.is_empty() || trimmed.ends_with(':') {
+        folder
+    } else {
+        trimmed.to_string()
+    }
 }
 
 /// A finished clone, and whether Git skipped old file contents.
@@ -108,6 +117,38 @@ pub async fn clone_repository_for_project(
     .map_err(|error| failed("failed", error.to_string()))?
 }
 
+/// How long a look at a remote may take before the form stops waiting.
+const INSPECT_TIMEOUT_MS: u64 = 20_000;
+
+/// Looks at `location` (a repository URL or a local checkout) before
+/// downloading it: its branches, any CutReady project and LFS (local only),
+/// and, for GitHub, whether the signed-in account can push. Changes nothing.
+#[auditaur_command(skip_all)]
+pub async fn inspect_repository_for_project(
+    location: String,
+) -> contract::TauriCommandResult<contract::RepositoryInspectionResult> {
+    reject_remote_url_credentials(&location)
+        .map_err(|message| failed("invalid_remote_url", message))?;
+    // Draftline sends the token only to the GitHub API, for a GitHub remote.
+    let github_token = github_credential_token().map(|credential| credential.token);
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut context = repository_context()?;
+        let folder = PathBuf::from(&location);
+        contract::inspect_repository_with_context(
+            &mut context,
+            contract::InspectRepositoryRequest {
+                location,
+                target_folder: None,
+                timeout_ms: Some(INSPECT_TIMEOUT_MS),
+                github_token,
+            },
+        )
+        .map_err(|error| repository_error(error, &folder))
+    })
+    .await
+    .map_err(|error| failed("failed", error.to_string()))?
+}
+
 /// Creates the CutReady folder `name` inside `parent` (a folder in a Git
 /// checkout) and records it in the repository's `.draftline` marker. Nothing
 /// is committed. Open the returned `workspace_path`.
@@ -137,8 +178,8 @@ pub async fn init_project_in_repository_for_project(
 
 /// Policy and credentials for working with a repository CutReady doesn't
 /// manage yet. Variations stay under `cutready/`, as in every hybrid project.
-fn repository_context(
-) -> contract::TauriCommandResult<contract::DraftlineCommandContext<'static>> {
+fn repository_context() -> contract::TauriCommandResult<contract::DraftlineCommandContext<'static>>
+{
     let policy = cutready_content_policy().map_err(|error| failed("failed", error.to_string()))?;
     contract::DraftlineCommandContext::new()
         .with_content_policy(policy)
@@ -149,7 +190,10 @@ fn repository_context(
 
 /// Draftline's error, with a code the UI can explain for failed sign-ins and
 /// unreachable remotes, and the folder for `folder_not_empty`.
-fn repository_error(error: DraftlineError, folder: &std::path::Path) -> contract::TauriCommandError {
+fn repository_error(
+    error: DraftlineError,
+    folder: &std::path::Path,
+) -> contract::TauriCommandError {
     let failure = remote_failure(&error);
     let folder_not_empty = match &error {
         DraftlineError::FolderNotEmpty(path) => Some(path.clone()),
@@ -183,6 +227,23 @@ mod tests {
     use super::*;
 
     #[test]
+    fn opened_folder_has_no_trailing_separator_for_a_standalone_repository() {
+        let workdir = std::path::Path::new("C:/drill/demo-remote/");
+        assert_eq!(
+            folder_in_repository(workdir, std::path::Path::new("")),
+            "C:/drill/demo-remote"
+        );
+        assert!(
+            folder_in_repository(workdir, std::path::Path::new("cutready"))
+                .ends_with("demo-remote/cutready")
+        );
+        assert_eq!(
+            folder_in_repository(std::path::Path::new("C:/"), std::path::Path::new("")),
+            "C:/"
+        );
+    }
+
+    #[test]
     fn repository_errors_keep_codes_ui_can_explain() {
         let folder = std::path::Path::new("dest");
         let busy = repository_error(DraftlineError::FolderNotEmpty("dest/demo".into()), folder);
@@ -200,10 +261,7 @@ mod tests {
         assert_eq!(auth.code, "auth_failed");
         assert!(auth.message.contains("denied"));
 
-        let missing = repository_error(
-            DraftlineError::NotARepository("dest".into()),
-            folder,
-        );
+        let missing = repository_error(DraftlineError::NotARepository("dest".into()), folder);
         assert_eq!(missing.code, "not_a_repository");
     }
 

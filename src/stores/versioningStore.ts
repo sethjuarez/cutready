@@ -34,7 +34,7 @@ import { useToastStore } from "./toastStore";
 import { useAppStore } from "./appStore";
 import { useSyncStore } from "./syncStore";
 import { activeTimelineLabel, askMergeName } from "../services/mergeName";
-import { syncCopy, teamUpdatesLabel } from "../domain/versioning";
+import { syncCopy, teamUpdatesLabel, versionDisplayName } from "../domain/versioning";
 import { mergeVariation, runVariationMerge, variationMergeErrorMessage } from "../services/variationMerge";
 import { isStaleMergeTokenError, MERGE_UPDATES_CHANGED_MESSAGE } from "../services/draftlineErrors";
 import { deleteSetAsideShelf, listSetAsideShelves, restoreSetAsideShelf, setAsideChanges } from "../services/setAsideShelves";
@@ -462,7 +462,7 @@ export const useVersioningStore = create<VersioningStoreState>((set, get) => ({
   openSnapshotPreview: async (commitId) => {
     try {
       const node = get().graphNodes.find((entry) => entry.id === commitId);
-      const label = node?.message?.trim() || commitId.slice(0, 7);
+      const label = (node && versionDisplayName(node)) || commitId.slice(0, 7);
       app().openTab({
         type: "snapshot-preview",
         path: `snapshot:${commitId}`,

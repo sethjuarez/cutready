@@ -76,6 +76,8 @@ export function cloneErrorView(error: unknown, phase: RepoProjectPhase = "clone"
       return { kind: "generic", message: LFS_MESSAGE };
     case "github_repository_not_found":
       return { kind: "generic", message: "GitHub couldn't find that repository, or your account can't see it." };
+    case "github_no_push_access":
+      return { kind: "generic", message: "Your GitHub account can't send to this repository. Ask for write access, or use your own copy (a fork)." };
   }
   if (/\b401\b|authentication/i.test(text)) return { kind: "auth", message: AUTH_MESSAGE };
   if (/\blfs\b|filter/i.test(text)) return { kind: "generic", message: LFS_MESSAGE };

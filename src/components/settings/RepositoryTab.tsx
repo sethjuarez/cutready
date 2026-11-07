@@ -3,6 +3,7 @@ import { Info } from "lucide-react";
 import { useSettings } from "../../hooks/useSettings";
 import { addDraftlineRemote, listDraftlineRemotes } from "../../services/draftlineVersioning";
 import { GitHubConnectionCard } from "../GitHubConnectionCard";
+import { ProjectSettingsCard } from "./ProjectSettingsCard";
 import { inputClass } from "../../styles";
 
 export function RepositoryTab({ settings, updateSetting }: {
@@ -116,6 +117,8 @@ export function RepositoryTab({ settings, updateSetting }: {
           <p className="text-xs text-error">{testMessage}</p>
         )}
       </fieldset>
+
+      <ProjectSettingsCard />
     </div>
   );
 }

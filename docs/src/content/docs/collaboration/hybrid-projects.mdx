@@ -25,6 +25,17 @@ From **Home**, open **New** → **New in existing repo…**:
 3. **Workspace name**: the CutReady folder created inside the repository,
    for example `<folder>/<repo>/cutready`.
 
+Before downloading, CutReady checks the repository and tells you if:
+
+- your GitHub account can't send to it (ask for write access, or use a fork);
+- for a repository already on your computer: it already has a CutReady
+  project (CutReady opens it instead), or it uses Git LFS and Git LFS isn't
+  set up here.
+
+When the repository has more than one branch, **Send saves to** picks the
+branch your saves are sent to for review. It defaults to the repository's
+default branch and is recorded in `.draftline` as the project's base.
+
 Choose **Download & create**. CutReady downloads the whole repository,
 including its history, then creates the folder and opens it. If the
 repository already has a CutReady project, CutReady opens that folder instead
@@ -59,6 +70,20 @@ the repository root names its folder. Opening another folder in the same
 repository is refused with a message naming the project's folder. If a
 developer renames the folder, CutReady points you to the new one and keeps its
 history.
+
+### Project settings
+
+**Settings** → **Repository** → **Project** edits two settings stored in
+`.draftline`, so everyone who opens the project shares them:
+
+- **Send saves to**: the base branch. Leave it blank for the repository's
+  default.
+- **Save label template**: an optional one-line pattern for commit messages,
+  with `{subject}` once, for example `docs(demo): {subject}`. A save named
+  "Outline" is committed as `docs(demo): Outline`. CutReady's History still
+  shows "Outline".
+
+Saving them records a save of `.draftline`.
 
 ### Moving or renaming the project folder
 
@@ -130,6 +155,8 @@ UI never names the base branch.
 | **Uses Git LFS or another Git filter** | Git LFS isn't set up on this computer, or the filter isn't Git LFS | Install Git LFS and run `git lfs install`, or ask a developer |
 | **These changes include Git LFS files** | Git LFS isn't set up here, so Send can't upload their content | Install Git LFS and run `git lfs install`, then send again |
 | **Git LFS couldn't process this project's large files** | Git LFS sign-in failed, or a file's content isn't on this computer | Check Git sign-in and try again; nothing was sent |
+| **Your GitHub account can't send to this repository** | Your account has read-only access | Ask for write access, or use your own copy (a fork) |
+| **GitHub couldn't find this repository** | The repository is private to an account you aren't signed in as, or was renamed | Check the GitHub connection in **Settings** → **Repository** |
 
 <Aside type="note">
   Saves are atomic. If a developer commit lands mid-save, CutReady refuses the

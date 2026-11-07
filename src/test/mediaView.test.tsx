@@ -78,7 +78,7 @@ describe("MediaView", () => {
 
     const dialog = await screen.findByTestId("media-remove-dialog");
     expect(loadAssets).toHaveBeenCalled();
-    const list = within(dialog).getByRole("list", { name: "Files to remove" });
+    const list = await within(dialog).findByRole("list", { name: "Files to remove" });
     expect(list).toHaveTextContent("orphan.png");
     expect(list).toHaveTextContent("old.webm");
     expect(list).not.toHaveTextContent("used.png");

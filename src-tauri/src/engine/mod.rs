@@ -11,7 +11,7 @@ pub mod document_writer;
 pub mod draftline_adapter;
 pub mod export;
 pub mod ffmpeg;
-pub mod github_pull_requests;
+pub mod github_provider;
 pub mod identity;
 pub mod interaction;
 pub mod media_cleanup;

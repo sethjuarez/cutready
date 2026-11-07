@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { createRoot } from "react-dom/client";
 import { Dialog } from "../components/Dialog";
 
 describe("stacked dialogs", () => {
@@ -27,5 +28,32 @@ describe("stacked dialogs", () => {
     expect(screen.getByRole("dialog")).toHaveAttribute("aria-labelledby", "lower");
     fireEvent.keyDown(window, { key: "Escape" });
     expect(closeLower).toHaveBeenCalledOnce();
+  });
+
+  // Outside act, React commits the dialog before its stack effect runs; anything
+  // watching the DOM (assistive tech, Testing Library's findBy) sees that commit.
+  it("is exposed to assistive tech from its first commit", async () => {
+    const env = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+    const actEnvironment = env.IS_REACT_ACT_ENVIRONMENT;
+    env.IS_REACT_ACT_ENVIRONMENT = false;
+    const host = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(host);
+    try {
+      const hidden = await new Promise<string | null>((resolve) => {
+        const observer = new MutationObserver(() => {
+          const dialog = document.querySelector('[role="alertdialog"]');
+          if (!dialog) return;
+          observer.disconnect();
+          resolve(dialog.parentElement?.getAttribute("aria-hidden") ?? null);
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+        root.render(<Dialog isOpen onClose={() => {}} role="alertdialog"><p>Remove?</p></Dialog>);
+      });
+      expect(hidden).toBeNull();
+    } finally {
+      root.unmount();
+      host.remove();
+      env.IS_REACT_ACT_ENVIRONMENT = actEnvironment;
+    }
   });
 });

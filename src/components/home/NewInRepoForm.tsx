@@ -14,6 +14,7 @@ import {
   type CloneErrorView,
 } from "../../services/repoClone";
 import { CloneProgressBar } from "./CloneProgressBar";
+import { RepoPreflightNotices, useRepoPreflight } from "./RepoPreflight";
 import {
   CloneErrorNotice,
   fieldClass,
@@ -47,7 +48,16 @@ export function NewInRepoForm({ chooseFolder, onClose }: { chooseFolder: ChooseF
   // Kept after a clone so a taken folder name can be changed without downloading again.
   const [cloned, setCloned] = useState<{ key: string; repository: ClonedRepositoryResult; created?: string } | null>(null);
 
+  const [picked, setPicked] = useState<{ location: string; target: string } | null>(null);
+
   const trimmed = source.trim();
+  const preflight = useRepoPreflight(trimmed);
+  const targets = preflight.result?.targets ?? [];
+  // A choice made for one repository doesn't carry over to another.
+  const target = picked?.location === trimmed ? picked.target : null;
+  const setTarget = (value: string) => setPicked({ location: trimmed, target: value });
+  // Where the new project sends its saves; null keeps the repository's default.
+  const sendTo = target && targets.includes(target) ? target : targets[0] ?? null;
   const slug = projectFolderName(name);
   const dest = parent && trimmed ? joinPath(parent, repoNameFromUrl(trimmed)) : null;
   const cloneKey = `${trimmed}\n${dest}\n${blobless}`;
@@ -79,7 +89,7 @@ export function NewInRepoForm({ chooseFolder, onClose }: { chooseFolder: ChooseF
       const result = await startProjectInRepository(
         {
           initProject: async (root, folderName) => {
-            const { workspace_path } = await workspaceIpc.createProjectInRepository(root, folderName);
+            const { workspace_path } = await workspaceIpc.createProjectInRepository(root, folderName, sendTo);
             // A retry after a failed open reopens this folder instead of creating another.
             setCloned({ key: cloneKey, repository: { ...repository, project_path: workspace_path }, created: workspace_path });
             return workspace_path;
@@ -124,6 +134,7 @@ export function NewInRepoForm({ chooseFolder, onClose }: { chooseFolder: ChooseF
         autoFocus
         className={`${fieldClass} w-full`}
       />
+      <RepoPreflightNotices state={preflight} />
       <p className="mt-1.5 text-xs text-[rgb(var(--color-text-secondary))]">
         {blobless
           ? "Downloads the current files and the list of versions, but not the contents of older file versions."
@@ -178,6 +189,26 @@ export function NewInRepoForm({ chooseFolder, onClose }: { chooseFolder: ChooseF
         <div className="mt-2 text-xs text-[rgb(var(--color-text-secondary))]">
           CutReady folder: <span className="font-mono text-[rgb(var(--color-text))]">{dest ? joinPath(dest, slug) : slug}</span>
         </div>
+      )}
+
+      {targets.length > 0 && (
+        <>
+          <label htmlFor="home-repo-send-to" className="mt-3 mb-2 block text-sm font-medium">Send saves to</label>
+          <select
+            id="home-repo-send-to"
+            value={sendTo ?? ""}
+            onChange={(e) => setTarget(e.target.value)}
+            disabled={created !== undefined}
+            className={`${fieldClass} w-full`}
+          >
+            {targets.map((name, index) => (
+              <option key={name} value={name}>{index === 0 ? `${name} (default)` : name}</option>
+            ))}
+          </select>
+          <p className="mt-1.5 text-xs text-[rgb(var(--color-text-secondary))]">
+            When you send, CutReady asks for your saves to be added here.
+          </p>
+        </>
       )}
 
       <div className="mt-4 flex justify-end gap-2">

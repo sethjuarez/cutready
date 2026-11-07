@@ -7,6 +7,9 @@ import { SessionHistoryPanel } from "./SessionHistoryPanel";
 import { MessageRow, WorkingNotesInline } from "./chat/ChatMessageRow";
 import { FileTypeIcon, typeColors } from "./chat/chatFileTypes";
 import { NO_TOOL_ACTIVITY, describeToolCall, fetchWebReferenceContent, textContent } from "./chat/chatText";
+import { ComposerPopover, isInComposerPopover } from "./chat/ComposerPopover";
+import { RunDetailsPopover } from "./chat/RunDetailsPopover";
+import { reasoningEffortLabel } from "./chat/runDetails";
 
 import { clearSuppressedEditorFlush, suppressEditorFlush, useAppStore } from "../stores/appStore";
 import { useChatStore } from "../stores/chatStore";
@@ -48,7 +51,6 @@ import {
   X,
   Square,
   Activity,
-  CircleHelp,
   Database,
   Maximize2,
   Minimize2,
@@ -56,6 +58,7 @@ import {
 } from "lucide-react";
 
 export { describeToolCall, fetchWebReferenceContent, workingNotesPreview } from "./chat/chatText";
+export { formatRunDuration, formatRunTokens, harnessRunLabel, providerRunLabel } from "./chat/runDetails";
 
 const CHAT_AUTO_SCROLL_THRESHOLD_PX = 48;
 const TOOL_ACTIVITY_PREVIEW_MAX_CHARS = 1_200;
@@ -251,51 +254,6 @@ interface AgentModelRoutePreview {
   api_route: string;
   history_strategy: string;
   effective_reasoning_effort?: string | null;
-}
-
-export function providerRunLabel(provider: string | undefined): string {
-  switch ((provider ?? "").toLowerCase()) {
-    case "microsoft_foundry":
-      return "Microsoft Foundry";
-    case "azure_openai":
-      return "Azure OpenAI";
-    case "openai":
-      return "OpenAI";
-    case "anthropic":
-      return "Anthropic";
-    case "copilot-sdk":
-      return "GitHub Copilot";
-    default:
-      return provider?.trim() || "—";
-  }
-}
-
-export function harnessRunLabel(harness: string | undefined): string {
-  switch ((harness ?? "").toLowerCase()) {
-    case "prompty":
-      return "Prompty";
-    case "agentive":
-      return "Agentive";
-    case "copilot-sdk":
-      return "GitHub Copilot";
-    default:
-      return harness?.trim() || "—";
-  }
-}
-
-export function formatRunDuration(ms: number | undefined): string {
-  if (typeof ms !== "number" || !Number.isFinite(ms) || ms < 0) return "—";
-  if (ms < 1_000) return `${Math.round(ms)}ms`;
-  const seconds = ms / 1_000;
-  if (seconds < 60) return `${seconds.toFixed(seconds < 10 ? 1 : 0)}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = Math.round(seconds % 60);
-  return `${minutes}m ${remainingSeconds}s`;
-}
-
-export function formatRunTokens(tokens: number | undefined): string {
-  if (typeof tokens !== "number" || !Number.isFinite(tokens) || tokens < 0) return "—";
-  return Math.round(tokens).toLocaleString();
 }
 
 const ROW_TARGETED_SKETCH_MUTATION_TOOLS = new Set([
@@ -1014,9 +972,6 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
 
   // Constrain dropdown heights to available viewport space
   const acMaxH = useDropdownMaxHeight(autocompleteRef, showAutocomplete);
-  const ctxMaxH = useDropdownMaxHeight(contextPickerRef, showContextPicker);
-  const modelMaxH = useDropdownMaxHeight(modelPickerRef, showModelPicker);
-  const agentMaxH= useDropdownMaxHeight(agentPickerRef, showAgentPicker);
 
   // All agents: built-ins + custom
   const allAgents = useMemo(() => {
@@ -1109,6 +1064,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
   useEffect(() => {
     if (!showContextPicker && !showModelPicker && !showReasoningPicker && !showAgentPicker) return;
     const handle = (e: MouseEvent) => {
+      if (isInComposerPopover(e.target)) return;
       if (showContextPicker && contextPickerRef.current && !contextPickerRef.current.contains(e.target as Node)) setShowContextPicker(false);
       if (showModelPicker && modelPickerRef.current && !modelPickerRef.current.contains(e.target as Node)) setShowModelPicker(false);
       if (showReasoningPicker && reasoningPickerRef.current && !reasoningPickerRef.current.contains(e.target as Node)) setShowReasoningPicker(false);
@@ -2253,7 +2209,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
               <IconPaperclip size={12} />
             </button>
             {showContextPicker && (
-              <div className="absolute bottom-full left-0 mb-1 w-[240px] bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg overflow-hidden z-20 flex flex-col" style={{ maxHeight: ctxMaxH }}>
+              <ComposerPopover anchorRef={contextPickerRef} width={240} className="z-dropdown bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg overflow-hidden flex flex-col">
                 <div className="px-2.5 pt-2 pb-1 shrink-0">
                   <input
                     className="w-full px-2 py-1 text-xs bg-[rgb(var(--color-surface-alt))] border border-[rgb(var(--color-border))] rounded text-[rgb(var(--color-text))] placeholder-[rgb(var(--color-text-secondary))] focus:outline-none focus:border-[rgb(var(--color-accent))]"
@@ -2286,7 +2242,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
                     ))
                   )}
                 </div>
-              </div>
+              </ComposerPopover>
             )}
           </div>
 
@@ -2306,7 +2262,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
               <IconChevronDown size={10} />
             </button>
             {showAgentPicker && (
-              <div className="absolute bottom-full left-0 mb-1 w-[240px] bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg overflow-hidden z-20 flex flex-col" style={{ maxHeight: agentMaxH }}>
+              <ComposerPopover anchorRef={agentPickerRef} width={240} className="z-dropdown bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg overflow-hidden flex flex-col">
                 {BUILT_IN_AGENTS.length > 0 && (
                   <>
                     <div className="px-3 py-1.5 border-b border-[rgb(var(--color-border))] shrink-0">
@@ -2380,7 +2336,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
                     </div>
                   </>
                 )}
-              </div>
+              </ComposerPopover>
             )}
           </div>
 
@@ -2420,7 +2376,7 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
                 currentModel={effectiveModel}
                 providerId={effectiveProvider?.id}
                 onClose={() => setShowModelPicker(false)}
-                maxHeight={modelMaxH}
+                anchorRef={modelPickerRef}
               />
             )}
           </div>
@@ -2450,89 +2406,6 @@ function ChatTab({ focusMode = false }: { focusMode?: boolean }) {
       </div>
     </div>
   );
-}
-
-function RunDetailsPopover({
-  details,
-  toolCount = 0,
-  status = "Completed",
-}: {
-  details: ChatRunDetails;
-  toolCount?: number;
-  status?: "Completed" | "Configured";
-}) {
-  const [open, setOpen] = useState(false);
-  const usage = details.usage;
-  const effectiveToolCount = details.tool_calls ?? toolCount;
-  const rows = [
-    ["Harness", harnessRunLabel(details.execution_engine)],
-    ["Provider", providerRunLabel(details.provider)],
-    ["Model", details.model || "—"],
-    ["Reasoning", reasoningEffortLabel(details.reasoning_effort ?? "")],
-    ["Agent", details.agent_id || "—"],
-    ["Duration", formatRunDuration(details.elapsed_ms)],
-    ["Tools", `${effectiveToolCount} call${effectiveToolCount === 1 ? "" : "s"}`],
-    ["Tokens", usage ? `${formatRunTokens(usage.prompt_tokens)} in / ${formatRunTokens(usage.completion_tokens)} out` : "—"],
-  ];
-
-  return (
-    <span className="relative inline-flex items-center">
-      <button
-        type="button"
-        aria-label="Show run details"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            setOpen(false);
-            event.currentTarget.blur();
-          }
-        }}
-        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface-alt))]/50 text-[rgb(var(--color-text-secondary))]/70 transition-colors hover:border-[rgb(var(--color-accent))]/45 hover:bg-[rgb(var(--color-accent))]/10 hover:text-[rgb(var(--color-accent))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-accent))]/35"
-        title="Show run details"
-      >
-        <CircleHelp className="h-3.5 w-3.5" />
-      </button>
-      {open && (
-        <span
-          role="dialog"
-          aria-label="Run details"
-          className="absolute bottom-7 right-0 z-[100] block w-72 rounded-2xl border border-[rgb(var(--color-border-subtle))] bg-[rgb(var(--color-surface))] p-3 text-left normal-case tracking-normal text-[rgb(var(--color-text))] shadow-xl"
-        >
-          <span className="mb-2 flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">
-              Run details
-            </span>
-            <span className="rounded-full bg-[rgb(var(--color-accent))]/10 px-2 py-0.5 text-2xs font-medium text-[rgb(var(--color-accent))]">
-              {status}
-            </span>
-          </span>
-          <span className="grid grid-cols-[5.75rem_minmax(0,1fr)] gap-x-3 gap-y-1.5">
-            {rows.map(([label, value]) => (
-              <span key={label} className="contents">
-                <span className="text-2xs font-medium uppercase tracking-[0.12em] text-[rgb(var(--color-text-secondary))]/75">
-                  {label}
-                </span>
-                <span className="truncate font-mono text-xs normal-case tracking-normal text-[rgb(var(--color-text))]/90">
-                  {value}
-                </span>
-              </span>
-            ))}
-          </span>
-          {details.run_id && (
-            <span className="mt-2 block truncate border-t border-[rgb(var(--color-border-subtle))] pt-2 font-mono text-2xs normal-case tracking-normal text-[rgb(var(--color-text-secondary))]/70">
-              {details.run_id}
-            </span>
-          )}
-        </span>
-      )}
-    </span>
-  );
-}
-
-function reasoningEffortLabel(effort: string | undefined): string {
-  if (!effort) return "Default";
-  return effort === "xhigh" ? "X-high" : effort[0].toUpperCase() + effort.slice(1);
 }
 
 function ReasoningEffortPicker({
@@ -2572,7 +2445,7 @@ function ReasoningEffortPicker({
         <IconChevronDown size={10} />
       </button>
       {open && (
-        <div className="absolute bottom-full right-0 z-[100] mb-1 w-44 overflow-hidden rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] py-1 shadow-xl">
+        <ComposerPopover anchorRef={pickerRef} width={176} align="right" className="z-dropdown overflow-hidden rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] py-1 shadow-xl">
           <div className="border-b border-[rgb(var(--color-border-subtle))] px-3 py-1.5 text-2xs font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]/80">
             Reasoning
           </div>
@@ -2594,7 +2467,7 @@ function ReasoningEffortPicker({
               </button>
             );
           })}
-        </div>
+        </ComposerPopover>
       )}
     </div>
   );
@@ -2606,18 +2479,18 @@ function ModelPickerDropdown({
   currentModel,
   providerId,
   onClose,
-  maxHeight,
+  anchorRef,
 }: {
   currentModel: string;
   providerId?: string;
   onClose: () => void;
-  maxHeight: number;
+  anchorRef: RefObject<HTMLElement | null>;
 }) {
   const { settings, updateSetting } = useSettings();
   const { models, loading: loadingModels } = useModelList(settings, providerId, currentModel);
 
   return (
-    <div className="absolute bottom-full left-0 mb-1 w-[200px] bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg overflow-hidden z-20 flex flex-col" style={{ maxHeight }}>
+    <ComposerPopover anchorRef={anchorRef} width={200} className="z-dropdown bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-lg overflow-hidden flex flex-col">
       <div className="px-3 py-2 border-b border-[rgb(var(--color-border))] shrink-0">
         <span className="text-2xs font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider">Model</span>
       </div>
@@ -2647,7 +2520,7 @@ function ModelPickerDropdown({
           ))
         )}
       </div>
-    </div>
+    </ComposerPopover>
   );
 }
 

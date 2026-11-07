@@ -88,7 +88,7 @@
       "steps": [
         { "hover": { "testId": "explorer-item-brief.md" } },
         { "click": { "role": "button", "name": "Delete brief", "exact": true } },
-        { "expect": { "role": "dialog", "name": "Delete note?" }, "toBeVisible": true },
+        { "expect": { "role": "alertdialog", "name": "Delete note?" }, "toBeVisible": true },
         { "click": { "testId": "delete-asset-confirm" } },
         { "expect": { "testId": "explorer-item-brief.md" }, "toHaveCount": 0 },
         { "expectIpc": "delete_note", "status": "ok" },

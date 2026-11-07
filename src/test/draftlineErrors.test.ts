@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   GIT_FILTER_FAILED_MESSAGE,
   GIT_INDEX_LOCKED_MESSAGE,
+  GITHUB_NO_PUSH_ACCESS_MESSAGE,
+  GITHUB_REPOSITORY_NOT_FOUND_MESSAGE,
   INVALID_FOLDER_MARKER_MESSAGE,
   LOCAL_STATE_CHANGED_MESSAGE,
   NEWER_FOLDER_MARKER_MESSAGE,
@@ -60,6 +62,8 @@ describe("Draftline error messages", () => {
     ["invalid_folder_marker", INVALID_FOLDER_MARKER_MESSAGE],
     ["newer_folder_marker", NEWER_FOLDER_MARKER_MESSAGE],
     ["git_filter_failed", GIT_FILTER_FAILED_MESSAGE],
+    ["github_no_push_access", GITHUB_NO_PUSH_ACCESS_MESSAGE],
+    ["github_repository_not_found", GITHUB_REPOSITORY_NOT_FOUND_MESSAGE],
   ])("maps %s to a plain-language message", (code, expected) => {
     const error = { code, message: "technical detail" };
     expect(friendlyDraftlineErrorMessage(error)).toBe(expected);

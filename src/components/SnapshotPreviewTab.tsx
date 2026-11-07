@@ -30,6 +30,7 @@ import {
 import { errorMessage, useAppStore } from "../stores/appStore";
 import { useVersioningStore } from "../stores/versioningStore";
 import { useSyncStore } from "../stores/syncStore";
+import { versionDisplayName } from "../domain/versioning";
 import type { DiffEntry } from "../types/sketch";
 import type { ProjectEntry, ProjectView } from "../types/project";
 import { draftlineToRepoPath, hybridVariationName } from "../utils/draftlinePaths";
@@ -95,6 +96,7 @@ export function SnapshotPreviewTab({ snapshotId }: SnapshotPreviewTabProps) {
   const [expandedPath, setExpandedPath] = useState<string | null>(null);
   const [fileDetails, setFileDetails] = useState<Record<string, FileDetailState>>({});
   const snapshot = graphNodes.find((node) => node.id === snapshotId);
+  const versionName = (snapshot && versionDisplayName(snapshot)) || snapshotId.slice(0, 7);
   const activeTimeline = timelines.find((timeline) => timeline.is_active);
   const selectedProject = projectFilter === "all"
     ? null
@@ -134,9 +136,8 @@ export function SnapshotPreviewTab({ snapshotId }: SnapshotPreviewTabProps) {
   }, [projectFilter, projects]);
 
   useEffect(() => {
-    const base = snapshot?.message?.trim() || snapshotId.slice(0, 7);
-    setNewTimelineName(branchNameFromSnapshot(base, snapshotId));
-  }, [snapshot?.message, snapshotId]);
+    setNewTimelineName(branchNameFromSnapshot(versionName, snapshotId));
+  }, [versionName, snapshotId]);
 
   const filteredEntries = useMemo(() => {
     if (!entries) return [];
@@ -156,7 +157,6 @@ export function SnapshotPreviewTab({ snapshotId }: SnapshotPreviewTabProps) {
   const totalAdded = filteredEntries.reduce((sum, entry) => sum + entry.additions, 0);
   const totalRemoved = filteredEntries.reduce((sum, entry) => sum + entry.deletions, 0);
   const restoreDisabled = restoring || !newTimelineName.trim();
-  const versionName = snapshot?.message ?? snapshotId.slice(0, 7);
 
   const handleRestore = useCallback(async () => {
     if (restoreDisabled) return;
@@ -266,7 +266,7 @@ export function SnapshotPreviewTab({ snapshotId }: SnapshotPreviewTabProps) {
           <div className="min-w-[14rem] flex-1">
             <div className="flex min-w-0 items-center gap-2">
               <h1 className="truncate text-sm font-semibold text-[rgb(var(--color-text))]">
-                {snapshot?.message ?? snapshotId.slice(0, 7)}
+                {versionName}
               </h1>
               <span className="shrink-0 rounded px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wider text-[rgb(var(--color-accent))]">
                 Snapshot Preview

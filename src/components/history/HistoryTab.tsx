@@ -4,6 +4,7 @@ import { buildTimeline, pathTimeline, searchTimeline } from "../../domain/histor
 import { useHistoryFilterStore } from "../../stores/historyFilterStore";
 import { useSyncStore } from "../../stores/syncStore";
 import { useVersioningStore } from "../../stores/versioningStore";
+import { useProjectSettings } from "../../stores/projectSettingsStore";
 import { ErrorBoundary } from "../ErrorBoundary";
 import { openCompareTab } from "../compare/openCompareTab";
 import { HistoryTimeline } from "./HistoryTimeline";
@@ -39,6 +40,7 @@ export function HistoryTab() {
   const openSnapshotPreview = useVersioningStore((s) => s.openSnapshotPreview);
   const hasRemote = useSyncStore((s) => !!s.currentRemote);
   const isDirty = useVersioningStore((s) => s.isDirty);
+  const template = useProjectSettings()?.commit_template ?? null;
   const [view, setView] = useState<HistoryView>("timeline");
   const [expanded, setExpanded] = useState(false);
   const [query, setQuery] = useState("");
@@ -46,9 +48,9 @@ export function HistoryTab() {
   const loading = filtered ? pathHistory.loading : graphLoading;
   const error = filtered ? pathHistory.error : graphError;
   const timeline = useMemo(() => {
-    if (document) return pathHistory.history ? pathTimeline(pathHistory.history, graph, hasRemote) : [];
-    return graph ? buildTimeline(graph, hasRemote) : [];
-  }, [document, pathHistory.history, graph, hasRemote]);
+    if (document) return pathHistory.history ? pathTimeline(pathHistory.history, graph, hasRemote, template) : [];
+    return graph ? buildTimeline(graph, hasRemote, template) : [];
+  }, [document, pathHistory.history, graph, hasRemote, template]);
   const visible = useMemo(() => searchTimeline(timeline, query), [timeline, query]);
   const preview = (id: string) => void openSnapshotPreview(id);
   const entryMenu = useHistoryEntryMenu(document, timeline, preview, (target) =>

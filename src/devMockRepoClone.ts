@@ -1,14 +1,39 @@
 // Web-shim fixtures for the commands that download a repository to start a project.
-import type { InitProjectInRepositoryResult } from "@draftline/client";
+import type { InitProjectInRepositoryResult, ProjectSettings, RepositoryInspection } from "@draftline/client";
 import type { ClonedRepositoryResult } from "./ipc/workspace";
 
 type Args = Record<string, unknown> | undefined;
+
+let settings: ProjectSettings = { folder: "cutready", id: "mock-project", base_branch: null, commit_template: null };
 
 const join = (parent: string, name: string) => `${parent}${parent.includes("\\") ? "\\" : "/"}${name}`;
 const slug = (name: string) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
 const handlers: Record<string, (args: Args) => unknown> = {
   clone_from_url: (args) => (args as { dest: string }).dest,
+  inspect_repository_for_project: (args): RepositoryInspection => {
+    const { location } = args as { location: string };
+    const remote = /^[a-z]+:\/\/|^git@/i.test(location);
+    return {
+      location_kind: remote ? "remote" : "local",
+      is_repository: true,
+      root: remote ? null : location,
+      project: null,
+      current_branch: remote ? null : "main",
+      default_branch: "main",
+      branches: ["main", "release"],
+      remotes: [],
+      lfs: { used: remote ? null : false, available: true },
+      target_folder: null,
+      github: null,
+    };
+  },
+  project_settings: (): ProjectSettings => ({ ...settings }),
+  update_project_settings: (args): ProjectSettings => {
+    const { request } = args as { request: { base_branch: string | null; commit_template: string | null } };
+    settings = { ...settings, base_branch: request.base_branch, commit_template: request.commit_template };
+    return { ...settings };
+  },
   // A fresh clone without a CutReady project yet.
   clone_repository_for_project: (args): ClonedRepositoryResult => {
     const { dest, blobless } = args as { dest: string; blobless?: boolean };

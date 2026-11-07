@@ -37,6 +37,8 @@ export const DraftlineErrorCode = {
   ProjectStateBusy: "project_state_busy",
   ProjectStateStranded: "project_state_stranded",
   FileTooLarge: "file_too_large",
+  GitHubNoPushAccess: "github_no_push_access",
+  GitHubRepositoryNotFound: "github_repository_not_found",
 } as const;
 
 /** A folder CutReady refused to start managing because it holds other files (typically code). */
@@ -73,6 +75,10 @@ export function adoptionPromptFromError(error: unknown): AdoptionPrompt | null {
 /** Draftline's next action when an interrupted operation belongs to another folder in the same checkout. */
 export const FINISH_IN_OTHER_FOLDER: SafeNextAction = "finish_in_other_folder";
 
+export const GITHUB_NO_PUSH_ACCESS_MESSAGE =
+  "Your GitHub account can't send to this repository. Ask for write access, or use your own copy (a fork).";
+export const GITHUB_REPOSITORY_NOT_FOUND_MESSAGE =
+  "GitHub couldn't find this repository, or your account can't see it.";
 export const GIT_INDEX_LOCKED_MESSAGE = "Git is busy in this project's repository — try again in a moment. Nothing was changed.";
 export const LOCAL_STATE_CHANGED_MESSAGE =
   "The project changed outside CutReady while this was running (for example, a developer committed). Nothing was lost — try again.";
@@ -329,6 +335,10 @@ export function friendlyDraftlineErrorMessage(error: unknown): string | null {
     }
     // pull_request_failed is raised by CutReady's own GitHub provider with an
     // actionable message (and 401s that must reach the sign-in path), so keep it.
+    case DraftlineErrorCode.GitHubNoPushAccess:
+      return GITHUB_NO_PUSH_ACCESS_MESSAGE;
+    case DraftlineErrorCode.GitHubRepositoryNotFound:
+      return GITHUB_REPOSITORY_NOT_FOUND_MESSAGE;
     case DraftlineErrorCode.GitIndexLocked:
       return GIT_INDEX_LOCKED_MESSAGE;
     case DraftlineErrorCode.VariationOutsideNamespace:
@@ -355,6 +365,8 @@ export function friendlyDraftlineErrorMessage(error: unknown): string | null {
 }
 
 const GUIDANCE_MESSAGES = [
+  GITHUB_NO_PUSH_ACCESS_MESSAGE,
+  GITHUB_REPOSITORY_NOT_FOUND_MESSAGE,
   GIT_INDEX_LOCKED_MESSAGE,
   LOCAL_STATE_CHANGED_MESSAGE,
   MERGE_UPDATES_CHANGED_MESSAGE,
