@@ -1,5 +1,6 @@
-// Typed wrappers for workspace folder helpers used by the home screen.
-import { invoke } from "../services/tauri";
+// Typed wrappers for workspace folder helpers used by the home screen, and for importing files.
+import { Channel, invoke } from "../services/tauri";
+import type { buildProviderConfig } from "../utils/providerConfig";
 
 export const workspaceIpc = {
   /** The parent folder last used to create, clone or open a workspace, if any. */
@@ -24,8 +25,62 @@ export type ImportConflict = "overwrite" | "rename";
 /** Commands that import an outside document into the open project as a note. */
 export type NoteImportCommand = "import_pptx" | "import_docx" | "import_pdf" | "import_markdown";
 
+export interface VideoImportProgress {
+  phase: string;
+  current: number;
+  total: number;
+  message: string;
+}
+
+export interface VideoImportPlanningContextReference {
+  kind: "sketch" | "storyboard" | "note";
+  path: string;
+  title: string;
+}
+
+export interface VideoImportPlanningContext {
+  text: string;
+  references: VideoImportPlanningContextReference[];
+}
+
+export interface VideoImportResult {
+  sketch_path: string;
+  note_path?: string;
+  row_count: number;
+  llm_refined: boolean;
+  llm_refinement_status?: string | null;
+}
+
+export interface VideoImportOptions {
+  llmConfig?: ReturnType<typeof buildProviderConfig>;
+  planningContext?: VideoImportPlanningContext;
+}
+
+const withConflict = (filePath: string, conflict?: ImportConflict) => (conflict ? { filePath, conflict } : { filePath });
+
 export const importIpc = {
   /** Imports `filePath` as a note and returns the note's project-relative path. */
   toNote: (command: NoteImportCommand, filePath: string, conflict?: ImportConflict) =>
-    invoke<string>(command, conflict ? { filePath, conflict } : { filePath }),
+    invoke<string>(command, withConflict(filePath, conflict)),
+  /** Imports a `.sk` file; returns the sketch's project-relative path. */
+  sketch: (filePath: string, conflict?: ImportConflict) => invoke<string>("import_sketch", withConflict(filePath, conflict)),
+  /** Imports a `.sb` file; returns the storyboard's project-relative path. */
+  storyboard: (filePath: string, conflict?: ImportConflict) =>
+    invoke<string>("import_storyboard", withConflict(filePath, conflict)),
+  /** Turns a demo video into a sketch, reporting each phase to `onProgress`. */
+  videoWithProgress: (
+    filePath: string,
+    options: VideoImportOptions,
+    onProgress: (progress: VideoImportProgress) => void,
+    conflict?: ImportConflict,
+  ) => {
+    const channel = new Channel<VideoImportProgress>();
+    channel.onmessage = onProgress;
+    return invoke<VideoImportResult>("import_video_with_progress", {
+      ...withConflict(filePath, conflict),
+      ...(options.llmConfig ? { llmConfig: options.llmConfig } : {}),
+      ...(options.planningContext ? { planningContext: options.planningContext } : {}),
+      onProgress: channel,
+    });
+  },
 };

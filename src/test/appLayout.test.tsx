@@ -54,6 +54,7 @@ vi.mock("../components/FeedbackDialog", () => ({
 vi.mock("../services/commandRegistry", () => ({
   commandRegistry: {
     execute: vi.fn(),
+    register: vi.fn(() => () => undefined),
     registerMany: vi.fn(() => () => undefined),
   },
   useCommands: () => [],

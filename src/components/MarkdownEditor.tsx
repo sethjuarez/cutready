@@ -19,6 +19,7 @@ import {
   type RichPasteOptions,
 } from "../services/richPaste";
 import { invoke } from "../services/tauri";
+import { readClipboardContent, readClipboardText } from "../services/clipboardContent";
 import { useAppStore, type ActivityEntry } from "../stores/appStore";
 
 const RICH_PASTE_CONFIG_TIMEOUT_MS = 5_000;
@@ -167,10 +168,6 @@ function insertMarkdown(view: EditorView, markdown: string) {
   });
 }
 
-function clipboardItemType(item: ClipboardItem, mimeType: string) {
-  return item.types.find((type) => type.toLowerCase() === mimeType);
-}
-
 export function MarkdownEditor({ value, onChange, placeholder, label, editorKey, saveImages = true, getAiConfig }: MarkdownEditorProps) {
   const editorIdRef = useRef(`markdown-editor-${Math.random().toString(36).slice(2, 10)}`);
   const viewRef = useRef<EditorView | null>(null);
@@ -228,13 +225,6 @@ export function MarkdownEditor({ value, onChange, placeholder, label, editorKey,
     }]);
   }, []);
 
-  const readClipboardText = useCallback(async () => {
-    if (!navigator.clipboard?.readText) {
-      throw new Error("Clipboard text access is unavailable");
-    }
-    return navigator.clipboard.readText();
-  }, []);
-
   const handlePlainPaste = useCallback(async () => {
     const view = viewRef.current;
     if (!view) return;
@@ -245,7 +235,7 @@ export function MarkdownEditor({ value, onChange, placeholder, label, editorKey,
     } catch (err) {
       logActivity(`Plain paste failed: ${err}`, "error");
     }
-  }, [logActivity, readClipboardText]);
+  }, [logActivity]);
 
   const handleIntelligentPaste = useCallback(async () => {
     const view = viewRef.current;
@@ -254,33 +244,7 @@ export function MarkdownEditor({ value, onChange, placeholder, label, editorKey,
     window.dispatchEvent(new CustomEvent("cutready:rich-paste-busy", { detail: true }));
 
     try {
-      let html = "";
-      let plain = "";
-      let image: Blob | null = null;
-      let imageExtension = "png";
-
-      if (navigator.clipboard?.read) {
-        const items = await navigator.clipboard.read();
-        for (const item of items) {
-          const htmlType = clipboardItemType(item, "text/html");
-          if (htmlType && !html) {
-            html = await (await item.getType(htmlType)).text();
-          }
-
-          const textType = clipboardItemType(item, "text/plain");
-          if (textType && !plain) {
-            plain = await (await item.getType(textType)).text();
-          }
-
-          const imageType = item.types.find((type) => type.startsWith("image/"));
-          if (imageType && !image) {
-            image = await item.getType(imageType);
-            imageExtension = imageType.split("/")[1] || "png";
-          }
-        }
-      } else {
-        plain = await readClipboardText();
-      }
+      const { html, plain, image, imageExtension } = await readClipboardContent();
 
       if (html) {
         const aiConfig = await withTimeout(
@@ -325,7 +289,7 @@ export function MarkdownEditor({ value, onChange, placeholder, label, editorKey,
     } finally {
       window.dispatchEvent(new CustomEvent("cutready:rich-paste-busy", { detail: false }));
     }
-  }, [logActivity, readClipboardText, saveImages]);
+  }, [logActivity, saveImages]);
 
   return (
     <div className="relative">

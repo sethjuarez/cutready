@@ -5,6 +5,8 @@ import { useChatStore } from "../stores/chatStore";
 import { panelOwner } from "../utils/navigation";
 import { useMediaLibraryLoader, useUnusedMediaCount } from "../hooks/useMediaLibrary";
 import { NavIcon } from "./navIcons";
+import { ImportNavRow } from "./import/ImportNavRow";
+import { useImportStore } from "../stores/importStore";
 import { UpdateAvailableButton } from "./UpdateAvailableButton";
 import { getContributorIdentity, type ResolvedIdentity } from "../services/identity";
 
@@ -42,6 +44,7 @@ export function Sidebar({
   const scrollRef = useRef<HTMLDivElement>(null);
   useMediaLibraryLoader();
   const unusedMedia = useUnusedMediaCount();
+  const dropActive = useImportStore((s) => s.dropActive);
   const mediaSelected = owner === "media";
 
   // Navigating anywhere leaves chat focus mode so its overlay never covers the destination.
@@ -105,6 +108,7 @@ export function Sidebar({
                 <span className="ico"><NavIcon name="home" size={16} /></span>
                 <span className="lbl">Home</span>
               </button>
+              <ImportNavRow />
             </div>
 
             {documents}
@@ -138,6 +142,8 @@ export function Sidebar({
             )}
           </div>
         </div>
+
+        {dropActive && <div className="cr-nav-drop" data-testid="import-drop-overlay">Drop files to import</div>}
 
         <div className="cr-nav-foot">
           <UpdateAvailableButton />

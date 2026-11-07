@@ -30,12 +30,20 @@ from other projects without manual copy-paste.
 
 ## How to Import
 
-Click the **Import** button in the **Explorer header** at the top of the sidebar
-tree view. A file picker opens where you can select one or more supported files.
-CutReady processes each file according to its type:
+Click **Import…** near the top of the sidebar, under **Home**. A file picker
+opens where you can select one or more supported files. You can also:
+
+- **Drop files on the sidebar** — they import the same way as picked files
+- Run **Import…** from the command palette (`Ctrl+Shift+P`)
+- Open the chevron next to **Import…** for **Video as sketch…** or
+  **Paste from clipboard…** (creates a note from what you copied)
+
+CutReady routes each file by its extension:
 
 - **`.sk`, `.sb`, `.md`** files are copied directly into the project
 - **`.docx`, `.doc`, `.pdf`, `.pptx`** files are converted to markdown notes
+- **Video files** become sketches
+- Other files are skipped, and CutReady tells you which ones
 
 ### Handling Duplicates
 

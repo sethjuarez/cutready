@@ -78,9 +78,8 @@
     {
       "name": "imports a markdown note",
       "steps": [
+        { "dialog": "open", "respond": ["${CUTREADY_SCRATCH}/kickoff.md"], "expectOptions": { "title": "Import Files", "multiple": true } },
         { "click": { "testId": "explorer-import-menu" } },
-        { "dialog": "open", "respond": ["${CUTREADY_SCRATCH}/kickoff.md"], "expectOptions": { "title": "Import Markdown Note", "multiple": true, "filters": [{ "name": "Markdown (.md)", "extensions": ["md"] }] } },
-        { "click": { "role": "menuitem", "name": "Markdown note..." } },
         { "expectIpc": "import_markdown", "status": "ok" },
         { "expect": { "testId": "explorer-item-kickoff.md" }, "toBeVisible": true },
         { "name": "the note was copied into the project", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "kickoff.md", "Imported agenda."] },
@@ -90,9 +89,9 @@
     {
       "name": "imports a sketch",
       "steps": [
-        { "click": { "testId": "explorer-import-menu" } },
-        { "dialog": "open", "respond": ["${CUTREADY_SCRATCH}/partner-demo.sk"], "expectOptions": { "title": "Import Sketch", "multiple": true } },
-        { "click": { "role": "menuitem", "name": "Sketch...", "exact": true } },
+        { "dialog": "open", "respond": ["${CUTREADY_SCRATCH}/partner-demo.sk"], "expectOptions": { "title": "Import Files", "multiple": true } },
+        { "click": { "testId": "explorer-import-more" } },
+        { "click": { "role": "menuitem", "name": "Files…" } },
         { "expectIpc": "import_sketch", "status": "ok" },
         { "expect": { "testId": "explorer-item-partner-demo.sk" }, "toBeVisible": true },
         { "name": "the sketch was copied into the project", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-json", "partner-demo.sk", "doc.title === 'Partner Demo'"] },
@@ -102,10 +101,9 @@
     {
       "name": "overwrites a note when an import conflicts",
       "steps": [
-        { "click": { "testId": "explorer-import-menu" } },
         { "dialog": "open", "respond": ["${CUTREADY_SCRATCH}/plan.md"] },
         { "dialog": "message", "respond": "Overwrite", "expectOptions": { "title": "File Already Exists" } },
-        { "click": { "role": "menuitem", "name": "Markdown note..." } },
+        { "click": { "testId": "explorer-import-menu" } },
         { "expectIpc": "import_markdown", "status": "ok" },
         { "name": "the existing note was replaced", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "Replacement agenda."] },
         { "name": "no copy was made", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan-2.md", "absent"] }
@@ -114,10 +112,9 @@
     {
       "name": "keeps both notes when an import conflicts",
       "steps": [
-        { "click": { "testId": "explorer-import-menu" } },
         { "dialog": "open", "respond": ["${CUTREADY_SCRATCH}/plan.md"] },
         { "dialog": "message", "respond": "Keep Both", "expectOptions": { "title": "File Already Exists" } },
-        { "click": { "role": "menuitem", "name": "Markdown note..." } },
+        { "click": { "testId": "explorer-import-menu" } },
         { "expectIpc": "import_markdown", "status": "ok" },
         { "expect": { "testId": "explorer-item-plan-2.md" }, "toBeVisible": true },
         { "name": "the import landed beside the original", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan-2.md", "Replacement agenda."] },
@@ -127,10 +124,9 @@
     {
       "name": "cancelling an import conflict keeps the original",
       "steps": [
-        { "click": { "testId": "explorer-import-menu" } },
         { "dialog": "open", "respond": ["${CUTREADY_SCRATCH}/plan.md"] },
         { "dialog": "message", "respond": "Cancel", "expectOptions": { "title": "File Already Exists" } },
-        { "click": { "role": "menuitem", "name": "Markdown note..." } },
+        { "click": { "testId": "explorer-import-menu" } },
         { "expectIpc": "import_markdown", "status": "error", "count": 1 },
         { "name": "the original note is untouched", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan.md", "Draft agenda."] },
         { "name": "no copy was made", "run": "node", "args": ["scripts/auditaur-drill-fixture.mjs", "expect-file", "plan-2.md", "absent"] }
