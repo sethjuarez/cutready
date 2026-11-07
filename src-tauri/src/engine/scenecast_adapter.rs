@@ -423,6 +423,7 @@ fn command_exists(candidate: &Path) -> bool {
 }
 
 fn command_for_path(program: PathBuf) -> Command {
+    #[cfg_attr(not(target_os = "windows"), allow(unused_mut))]
     let mut command = Command::new(program);
     #[cfg(target_os = "windows")]
     {

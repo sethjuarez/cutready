@@ -141,6 +141,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore = "requires `npm ci` (node + @resvg/resvg-js); run via npm run test:e2e:video-export"]
     fn renders_elucim_visual_to_frame_manifest() {
         let project = tempfile::tempdir().unwrap();
         let visuals_dir = project.path().join(".cutready").join("visuals");

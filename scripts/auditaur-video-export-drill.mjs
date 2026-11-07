@@ -69,7 +69,7 @@ const checks = [
   {
     id: "elucim-frame-renderer",
     description: "Elucim visuals rasterize to themed PNG frames and a terminal frame manifest",
-    args: ["test", "-p", "cutready", "animation", "--lib", "--quiet"],
+    args: ["test", "-p", "cutready", "animation", "--lib", "--quiet", "--", "--include-ignored"],
     expectedMinTests: 2,
   },
   {
