@@ -13,12 +13,30 @@ import type { NarrationPlan as NarrationPlanContract } from "../contracts/genera
 import type { PlanningCellLocks as PlanningCellLocksContract } from "../contracts/generated/model/planning-cell-locks";
 import type { PlanningRow as PlanningRowContract } from "../contracts/generated/model/planning-row";
 import type { Sketch as SketchContract, SketchState } from "../contracts/generated/model/sketch";
+import type {
+  DemoStepClick,
+  DemoStepHighlight,
+  DemoStepNavigate,
+  DemoStepSelect,
+  DemoStepType,
+  DemoStepWaitFor,
+  InteractionCapturePolicy,
+  WaitEditPolicy,
+} from "../contracts/generated/model/demo-step";
+import type {
+  FramingBeatFullScreen,
+  FramingBeatHold,
+  FramingBeatZoomTo,
+  FramingEasing,
+} from "../contracts/generated/model/framing-beat";
+import type { FramingRect as FramingRectContract } from "../contracts/generated/model/framing-rect";
+import type { InteractionBounds as InteractionBoundsContract } from "../contracts/generated/model/interaction-bounds";
 import type { TypingSpot as TypingSpotContract } from "../contracts/generated/model/typing-spot";
 
 // `.sk` document types come from contracts/sketch.tsp. Interfaces below only
 // narrow contract fields the frontend constrains further.
 
-export type { MotionPlanEasing, MotionPlanKind, SketchState };
+export type { FramingEasing, InteractionCapturePolicy, MotionPlanEasing, MotionPlanKind, SketchState, WaitEditPolicy };
 
 /** Recorded or generated narration audio attached to a row. */
 export type NarrationAsset = ContractData<NarrationAssetContract>;
@@ -53,8 +71,35 @@ export type PlanningCellLocks = ContractData<PlanningCellLocksContract>;
 /** A lockable planning-table cell. */
 export type PlanningCellField = keyof PlanningCellLocks;
 
+/** Target region in source screenshot pixels. */
+export type InteractionBounds = ContractData<InteractionBoundsContract>;
+
+/** Region normalized to the row screenshot or visual (0..1). */
+export type FramingRect = ContractData<FramingRectContract>;
+
+type Kinded<T, K extends string> = ContractData<T> & { kind: K };
+
+/** Normalized walkthrough step, discriminated by `kind`. */
+export type DemoStep =
+  | Kinded<DemoStepNavigate, "navigate">
+  | Kinded<DemoStepClick, "click">
+  | Kinded<DemoStepType, "type">
+  | Kinded<DemoStepSelect, "select">
+  | Kinded<DemoStepWaitFor, "wait_for">
+  | Kinded<DemoStepHighlight, "highlight">;
+
+/** Editorial camera/framing beat, discriminated by `kind`; `at_ms` is row-relative. */
+export type FramingBeat =
+  | Kinded<FramingBeatFullScreen, "full_screen">
+  | Kinded<FramingBeatZoomTo, "zoom_to">
+  | Kinded<FramingBeatHold, "hold">;
+
 /** A row in the sketch planning table. */
 export interface PlanningRow extends ContractData<PlanningRowContract> {
+  /** Normalized walkthrough steps compiled from prose actions or rough recordings. */
+  demo_steps?: DemoStep[] | null;
+  /** Editorial camera/framing beats for zoom, pan, crop, and hold intent; times are row-relative. */
+  framing_beats?: FramingBeat[] | null;
   /** Project-relative path to an Elucim visual file (e.g., ".cutready/visuals/abc123.json"). */
   visual?: string | null;
   motion_points?: MotionPoint[] | null;

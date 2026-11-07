@@ -13,19 +13,21 @@ public struct PlanningRow: TypraModel {
   public var durationSeconds: UInt32? = nil
   public var narrative: String = ""
   public var demoActions: String = ""
+  public var demoSteps: [DemoStep]? = nil
   public var screenshot: String? = nil
   public var visual: Any? = nil
   public var motionPoints: [MotionPoint]? = nil
   public var typingSpots: [TypingSpot]? = nil
   public var motionPlan: MotionPlan? = nil
+  public var framingBeats: [FramingBeat]? = nil
   public var designPlan: String? = nil
   public var narration: NarrationAsset? = nil
   public var narrationPlan: NarrationPlan? = nil
   /// Undeclared fields captured on load and written back on save (unknown-field passthrough).
   public var additionalProperties: [String: Any] = [:]
-  static let additionalPropertiesKnownKeys: Set<String> = ["id", "locked", "locks", "time", "duration_seconds", "narrative", "demo_actions", "screenshot", "visual", "motion_points", "typing_spots", "motion_plan", "design_plan", "narration", "narration_plan"]
+  static let additionalPropertiesKnownKeys: Set<String> = ["id", "locked", "locks", "time", "duration_seconds", "narrative", "demo_actions", "demo_steps", "screenshot", "visual", "motion_points", "typing_spots", "motion_plan", "framing_beats", "design_plan", "narration", "narration_plan"]
 
-  public init(id: String? = nil, locked: Bool? = nil, locks: PlanningCellLocks? = nil, time: String = "", durationSeconds: UInt32? = nil, narrative: String = "", demoActions: String = "", screenshot: String? = nil, visual: Any? = nil, motionPoints: [MotionPoint]? = nil, typingSpots: [TypingSpot]? = nil, motionPlan: MotionPlan? = nil, designPlan: String? = nil, narration: NarrationAsset? = nil, narrationPlan: NarrationPlan? = nil, additionalProperties: [String: Any] = [:]) {
+  public init(id: String? = nil, locked: Bool? = nil, locks: PlanningCellLocks? = nil, time: String = "", durationSeconds: UInt32? = nil, narrative: String = "", demoActions: String = "", demoSteps: [DemoStep]? = nil, screenshot: String? = nil, visual: Any? = nil, motionPoints: [MotionPoint]? = nil, typingSpots: [TypingSpot]? = nil, motionPlan: MotionPlan? = nil, framingBeats: [FramingBeat]? = nil, designPlan: String? = nil, narration: NarrationAsset? = nil, narrationPlan: NarrationPlan? = nil, additionalProperties: [String: Any] = [:]) {
     self.id = id
     self.locked = locked
     self.locks = locks
@@ -33,11 +35,13 @@ public struct PlanningRow: TypraModel {
     self.durationSeconds = durationSeconds
     self.narrative = narrative
     self.demoActions = demoActions
+    self.demoSteps = demoSteps
     self.screenshot = screenshot
     self.visual = visual
     self.motionPoints = motionPoints
     self.typingSpots = typingSpots
     self.motionPlan = motionPlan
+    self.framingBeats = framingBeats
     self.designPlan = designPlan
     self.narration = narration
     self.narrationPlan = narrationPlan
@@ -68,6 +72,9 @@ public struct PlanningRow: TypraModel {
     if let value = object["demo_actions"] {
       instance.demoActions = try TypraRuntime.string(value, field: "demo_actions")
     }
+    if let value = object["demo_steps"] {
+      instance.demoSteps = try TypraRuntime.array(value, field: "demo_steps").enumerated().map { try DemoStep.load($1, context: context.at("demo_steps").atIndex($0)) }
+    }
     if let value = object["screenshot"], !(value is NSNull) {
       instance.screenshot = try TypraRuntime.string(value, field: "screenshot")
     }
@@ -82,6 +89,9 @@ public struct PlanningRow: TypraModel {
     }
     if let value = object["motion_plan"] {
       instance.motionPlan = try MotionPlan.load(value, context: context.at("motion_plan"))
+    }
+    if let value = object["framing_beats"] {
+      instance.framingBeats = try TypraRuntime.array(value, field: "framing_beats").enumerated().map { try FramingBeat.load($1, context: context.at("framing_beats").atIndex($0)) }
     }
     if let value = object["design_plan"] {
       instance.designPlan = try TypraRuntime.string(value, field: "design_plan")
@@ -113,6 +123,9 @@ public struct PlanningRow: TypraModel {
     }
     result["narrative"] = self.narrative
     result["demo_actions"] = self.demoActions
+    if let value = self.demoSteps {
+      result["demo_steps"] = try value.map { try $0.save(context) }
+    }
     if let value = self.screenshot {
       result["screenshot"] = value
     }
@@ -130,6 +143,9 @@ public struct PlanningRow: TypraModel {
     }
     if let value = self.motionPlan {
       result["motion_plan"] = try value.save(context)
+    }
+    if let value = self.framingBeats {
+      result["framing_beats"] = try value.map { try $0.save(context) }
     }
     if let value = self.designPlan {
       result["design_plan"] = value

@@ -107,6 +107,9 @@ model PlanningRow {
   @sample(#{ demo_actions: "Open the workspace." })
   demo_actions: string;
 
+  /** Normalized walkthrough steps compiled from prose actions or rough recordings. Omitted when empty. */
+  demo_steps?: DemoStep[];
+
   /** Project-relative screenshot path. Legacy files may omit it; save writes `null` when unset. */
   screenshot: string | null = null;
 
@@ -116,6 +119,9 @@ model PlanningRow {
   motion_points?: MotionPoint[];
   typing_spots?: TypingSpot[];
   motion_plan?: MotionPlan;
+
+  /** Editorial camera/framing beats; t_ms is row-relative. Omitted when empty. */
+  framing_beats?: FramingBeat[];
 
   /** Designer brief for the visual. */
   design_plan?: string;
@@ -132,11 +138,17 @@ model NarrationAsset {
   @sample(#{ path: ".cutready/narration/row-1.wav" })
   path: string;
 
-  /** Narrative text at the moment the audio was recorded or generated. */
+  /** Spoken text used when the audio was recorded or generated. */
   source_text: string;
 
   /** SHA-256 of `source_text`. */
   source_text_hash: string;
+
+  /** Row narrative text at the moment the audio was recorded or generated. */
+  narrative_text?: string;
+
+  /** SHA-256 of `narrative_text`, for non-lossy staleness checks. */
+  narrative_text_hash?: string;
 
   mime_type: string;
 
@@ -227,4 +239,135 @@ model MotionPlan {
   kind: MotionPlanKind;
   keyframes?: MotionPlanKeyframe[];
   rationale?: string;
+}
+
+/** How a click step captures its interaction for export. */
+union InteractionCapturePolicy {
+  beforeAfter: "before_after",
+  beforeAfterAndMotion: "before_after_and_motion",
+}
+
+/** How the edit treats time spent waiting for a condition. */
+union WaitEditPolicy {
+  keepNatural: "keep_natural",
+  compressWait: "compress_wait",
+  showStartAndEnd: "show_start_and_end",
+  cutToCompletion: "cut_to_completion",
+  keepVisible: "keep_visible",
+}
+
+/** A target region in source screenshot pixels. */
+model InteractionBounds {
+  x: float32;
+  y: float32;
+  width: float32;
+  height: float32;
+}
+
+/** Kinds of walkthrough steps. */
+union DemoStepKind {
+  navigate: "navigate",
+  click: "click",
+  type: "type",
+  select: "select",
+  waitFor: "wait_for",
+  highlight: "highlight",
+}
+
+/**
+ * Normalized walkthrough intent between `demo_actions` prose and replay actions.
+ */
+@discriminator("kind")
+model DemoStep {
+  kind: DemoStepKind;
+}
+
+model DemoStepNavigate extends DemoStep {
+  kind: "navigate";
+  target: string;
+}
+
+model DemoStepClick extends DemoStep {
+  kind: "click";
+  target: string;
+  target_bounds?: InteractionBounds;
+  capture?: InteractionCapturePolicy;
+}
+
+model DemoStepType extends DemoStep {
+  kind: "type";
+  text: string;
+  target?: string;
+  target_bounds?: InteractionBounds;
+  clear_first?: boolean;
+}
+
+model DemoStepSelect extends DemoStep {
+  kind: "select";
+  target: string;
+  value: string;
+  target_bounds?: InteractionBounds;
+}
+
+model DemoStepWaitFor extends DemoStep {
+  kind: "wait_for";
+  condition: string;
+  timeout_ms?: uint32;
+  edit_policy?: WaitEditPolicy;
+}
+
+model DemoStepHighlight extends DemoStep {
+  kind: "highlight";
+  target: string;
+  target_bounds?: InteractionBounds;
+}
+
+/** A region normalized to the row screenshot or visual (0..1). */
+model FramingRect {
+  x: float32;
+  y: float32;
+  width: float32;
+  height: float32;
+}
+
+union FramingEasing {
+  linear: "linear",
+  easeInOut: "ease_in_out",
+  easeOut: "ease_out",
+}
+
+/** Kinds of framing beats. */
+union FramingBeatKind {
+  fullScreen: "full_screen",
+  zoomTo: "zoom_to",
+  hold: "hold",
+}
+
+/**
+ * Editorial camera intent for a row, separate from interaction replay.
+ * `at_ms` is relative to the start of the row; save always writes it.
+ */
+@discriminator("kind")
+model FramingBeat {
+  kind: FramingBeatKind;
+}
+
+model FramingBeatFullScreen extends FramingBeat {
+  kind: "full_screen";
+  at_ms?: uint32;
+}
+
+model FramingBeatZoomTo extends FramingBeat {
+  kind: "zoom_to";
+  at_ms?: uint32;
+  target?: string;
+  rect?: FramingRect;
+  duration_ms?: uint32;
+  easing?: FramingEasing;
+}
+
+model FramingBeatHold extends FramingBeat {
+  kind: "hold";
+  at_ms?: uint32;
+  duration_ms: uint32;
 }

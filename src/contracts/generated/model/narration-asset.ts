@@ -10,6 +10,8 @@ export class NarrationAsset {
   path: string = "";
   source_text: string = "";
   source_text_hash: string = "";
+  narrative_text?: string | undefined;
+  narrative_text_hash?: string | undefined;
   mime_type: string = "";
   duration_ms: number | null = null;
   leading_silence_ms?: number | undefined;
@@ -22,6 +24,12 @@ export class NarrationAsset {
     this.path = init?.path ?? "";
     this.source_text = init?.source_text ?? "";
     this.source_text_hash = init?.source_text_hash ?? "";
+    if (init?.narrative_text !== undefined) {
+      this.narrative_text = init.narrative_text;
+    }
+    if (init?.narrative_text_hash !== undefined) {
+      this.narrative_text_hash = init.narrative_text_hash;
+    }
     this.mime_type = init?.mime_type ?? "";
     if (init?.duration_ms !== undefined) {
       this.duration_ms = init.duration_ms;
@@ -63,6 +71,18 @@ export class NarrationAsset {
       data["source_text_hash"] !== null
     ) {
       instance.source_text_hash = String(data["source_text_hash"]);
+    }
+    if (
+      data["narrative_text"] !== undefined &&
+      data["narrative_text"] !== null
+    ) {
+      instance.narrative_text = String(data["narrative_text"]);
+    }
+    if (
+      data["narrative_text_hash"] !== undefined &&
+      data["narrative_text_hash"] !== null
+    ) {
+      instance.narrative_text_hash = String(data["narrative_text_hash"]);
     }
     if (data["mime_type"] !== undefined && data["mime_type"] !== null) {
       instance.mime_type = String(data["mime_type"]);
@@ -121,6 +141,15 @@ export class NarrationAsset {
     }
     if (obj.source_text_hash !== undefined && obj.source_text_hash !== null) {
       result["source_text_hash"] = obj.source_text_hash;
+    }
+    if (obj.narrative_text !== undefined && obj.narrative_text !== null) {
+      result["narrative_text"] = obj.narrative_text;
+    }
+    if (
+      obj.narrative_text_hash !== undefined &&
+      obj.narrative_text_hash !== null
+    ) {
+      result["narrative_text_hash"] = obj.narrative_text_hash;
     }
     if (obj.mime_type !== undefined && obj.mime_type !== null) {
       result["mime_type"] = obj.mime_type;

@@ -12,6 +12,7 @@ import type { ProjectView } from "./types/project";
 import type { AgentEvent, AppEvents } from "./ipc/events";
 import { isRecordingMockCommand, mockRecordingInvoke } from "./devMockRecording";
 import { isRepoCloneMockCommand, mockRepoCloneInvoke } from "./devMockRepoClone";
+import { isExportMockCommand, mockExportInvoke } from "./devMockExport";
 
 const MOCK_PROJECT: ProjectView = {
   root: "C:/mock-project",
@@ -181,6 +182,7 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
   // Check for E2E overrides first
   const overrides = (typeof window !== "undefined" && (window as any).__MOCK_OVERRIDES__) || _overrides;
   if (cmd in overrides) return overrides[cmd];
+  if (isExportMockCommand(cmd)) return mockExportInvoke(cmd, args, sendMockProgress);
 
   switch (cmd) {
     case "open_project":
@@ -212,52 +214,6 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return MOCK_SKETCH;
     case "save_sketch":
       return null;
-    case "export_markdown_to_word":
-      return { imagesEmbedded: 0, skippedRemoteImages: [] };
-    case "export_sketch_video":
-      sendMockProgress(args, {
-        phase: "title",
-        current: 1,
-        total: 7,
-        message: "Rendering sketch title card",
-      });
-      sendMockProgress(args, {
-        phase: "lead-in",
-        current: 2,
-        total: 7,
-        message: "Holding the first screen for 0.5 seconds",
-      });
-      sendMockProgress(args, {
-        phase: "row",
-        current: 3,
-        total: 7,
-        message: "Rendering row 1 of 3",
-      });
-      sendMockProgress(args, {
-        phase: "gap",
-        current: 4,
-        total: 7,
-        message: "Holding row 1 for 0.5s, then row 2 for 0.5s",
-      });
-      sendMockProgress(args, {
-        phase: "hold",
-        current: 6,
-        total: 7,
-        message: "Holding the final screen for 3 seconds",
-      });
-      sendMockProgress(args, {
-        phase: "assembling",
-        current: 7,
-        total: 7,
-        message: "Assembling the MP4",
-      });
-      return {
-        path: typeof args?.outputPath === "string"
-          ? args.outputPath
-          : "exports/demo-introduction-20250115-120000.mp4",
-        duration_seconds: 12,
-        row_count: 3,
-      };
     case "import_background_music":
       return {
         id: "mock-loop",
@@ -894,6 +850,8 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
             path: `.cutready/narration/mock-row-${rowIndex + 1}.webm`,
             source_text: sourceText ?? row.narrative,
             source_text_hash: "mock-source-text-hash",
+            narrative_text: row.narrative,
+            narrative_text_hash: "mock-narrative-text-hash",
             mime_type: mimeType ?? "audio/webm",
             duration_ms: durationMs ?? null,
             leading_silence_ms: leadingSilenceMs ?? null,
@@ -920,6 +878,8 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
             path: `.cutready/narration/mock-row-${index + 1}.wav`,
             source_text: sourceText ?? row.narrative,
             source_text_hash: "mock-source-text-hash",
+            narrative_text: row.narrative,
+            narrative_text_hash: "mock-narrative-text-hash",
             mime_type: "audio/x-wav",
             duration_ms: 4200,
             leading_silence_ms: 0,

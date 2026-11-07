@@ -263,4 +263,87 @@ describe("ScriptTable tab order", () => {
     });
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  it("edits compiled row intent as schema JSON", async () => {
+    const user = userEvent.setup();
+    const rows: PlanningRow[] = [{
+      ...filledRow("10s", "Narrate", "Click through"),
+      demo_steps: [{ kind: "click", target: "Continue" }],
+      framing_beats: [{ kind: "full_screen", at_ms: 0 }],
+    }];
+    const onChange = vi.fn();
+    render(<ScriptTable rows={rows} onChange={onChange} />);
+
+    await user.click(screen.getByText("Row intent"));
+
+    const demoSteps = screen.getByLabelText("Demo steps");
+    fireEvent.change(demoSteps, {
+      target: { value: '[{"kind":"wait_for","condition":"Results loaded","timeout_ms":5000}]' },
+    });
+    fireEvent.blur(demoSteps);
+
+    expect(onChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({
+        demo_steps: [{ kind: "wait_for", condition: "Results loaded", timeout_ms: 5000 }],
+        framing_beats: [{ kind: "full_screen", at_ms: 0 }],
+      }),
+    ]);
+  });
+
+  it("rejects malformed row intent without changing rows", async () => {
+    const user = userEvent.setup();
+    const rows = [filledRow("10s", "Narrate", "Click through")];
+    const onChange = vi.fn();
+    render(<ScriptTable rows={rows} onChange={onChange} />);
+
+    await user.click(screen.getByText("Row intent"));
+
+    const framingBeats = screen.getByLabelText("Framing beats");
+    fireEvent.change(framingBeats, { target: { value: '{"kind":"zoom_to"}' } });
+    fireEvent.blur(framingBeats);
+
+    expect(screen.getByText("Framing beats must be a JSON array.")).toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("rejects valid row intent kinds with missing required fields", async () => {
+    const user = userEvent.setup();
+    const rows = [filledRow("10s", "Narrate", "Click through")];
+    const onChange = vi.fn();
+    render(<ScriptTable rows={rows} onChange={onChange} />);
+
+    await user.click(screen.getByText("Row intent"));
+
+    const demoSteps = screen.getByLabelText("Demo steps");
+    fireEvent.change(demoSteps, { target: { value: '[{"kind":"type"}]' } });
+    fireEvent.blur(demoSteps);
+
+    expect(screen.getByText('Demo steps item 1 needs "text".')).toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("does not dirty rows when intent editors blur without edits", async () => {
+    const user = userEvent.setup();
+    const rows = [filledRow("10s", "Narrate", "Click through")];
+    const onChange = vi.fn();
+    render(<ScriptTable rows={rows} onChange={onChange} />);
+
+    await user.click(screen.getByText("Row intent"));
+    fireEvent.blur(screen.getByLabelText("Demo steps"));
+    fireEvent.blur(screen.getByLabelText("Framing beats"));
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("keeps row delete shortcuts out of intent textareas", async () => {
+    const user = userEvent.setup();
+    const rows = [filledRow("10s", "Narrate", "Click through"), filledRow("20s", "Next", "Continue")];
+    const onChange = vi.fn();
+    render(<ScriptTable rows={rows} onChange={onChange} />);
+
+    await user.click(screen.getAllByText("Row intent")[0]);
+    fireEvent.keyDown(screen.getAllByLabelText("Demo steps")[0], { key: "Backspace", ctrlKey: true });
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
 });

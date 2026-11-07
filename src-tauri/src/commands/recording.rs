@@ -257,10 +257,12 @@ fn persist_narration_asset(
     std::fs::rename(&tmp_path, &output_path)
         .map_err(|e| format!("Failed to finalize narration recording: {e}"))?;
 
-    let asset = NarrationAsset {
+    row.narration = Some(NarrationAsset {
         path: relative_path,
         source_text_hash: sha256_hex(&source_text),
         source_text,
+        narrative_text_hash: Some(sha256_hex(&row.narrative)),
+        narrative_text: Some(row.narrative.clone()),
         mime_type: mime_type.to_string(),
         duration_ms,
         leading_silence_ms,
@@ -268,8 +270,7 @@ fn persist_narration_asset(
         silence_threshold_db,
         byte_size: audio_data.len() as u64,
         recorded_at: Utc::now(),
-    };
-    row.narration = Some(asset);
+    });
     row.narration_plan = narration_plan;
     row.motion_plan = None;
 

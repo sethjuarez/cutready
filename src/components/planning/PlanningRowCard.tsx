@@ -2,7 +2,7 @@ import { useState, lazy, Suspense } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { X, Sparkles, Maximize2, Search, Image as ImageIcon, Folder, Plus, Camera, Crosshair, Lock, Unlock, Mic, AlertTriangle } from "lucide-react";
-import type { PlanningCellField, PlanningRow } from "../../types/sketch";
+import type { DemoStep, FramingBeat, PlanningCellField, PlanningRow } from "../../types/sketch";
 import type { RowDiff } from "../../utils/textDiff";
 import { useProjectImage } from "../../hooks/useProjectImage";
 import { useConfirmDialog } from "../ConfirmDialog";
@@ -10,6 +10,7 @@ import { getRowColor, hasAnyLock, isCellLocked } from "./rowState";
 import { LocalInput, MarkdownCell, CellActionRail, SparkleButton, CellLockButton } from "./PlanningCells";
 import { NarrationPlayer } from "./NarrationPlayer";
 import { MediaAddPopover } from "./MediaAddPopover";
+import { RowIntentEditor } from "./RowIntentEditor";
 
 const VisualCell = lazy(() => import("../VisualCell"));
 
@@ -52,7 +53,7 @@ export function PlanningRowCard({
   row: PlanningRow;
   idx: number;
   readOnly: boolean;
-  updateRow: (index: number, field: keyof PlanningRow, value: string) => void;
+  updateRow: (index: number, field: keyof PlanningRow, value: string | DemoStep[] | FramingBeat[] | null) => void;
   addRow: (afterIndex: number) => void;
   deleteRow: (index: number) => void;
   isDragging: boolean;
@@ -92,7 +93,11 @@ export function PlanningRowCard({
   const displayScreenshotSrc = projectRoot ? screenshotSrc : row.screenshot;
   const isRecordingNarration = narrationRecordingRow === idx;
   const isSavingNarration = narrationSavingRows?.has(idx) ?? false;
-  const narrationStale = Boolean(row.narration && row.narration.source_text !== row.narrative);
+  const narrationStale = Boolean(row.narration && (
+    row.narration.narrative_text != null
+      ? row.narration.narrative_text !== row.narrative
+      : row.narration.source_text !== row.narrative
+  ));
   const narrationPath = row.narration?.path ?? null;
   const motionPointCount = row.motion_points?.length ?? 0;
   const { confirm, confirmationDialog } = useConfirmDialog();
@@ -145,6 +150,7 @@ export function PlanningRowCard({
       className={`planning-grid planning-card group ${isSorting ? "" : "transition-[box-shadow,border-color] duration-fast ease-fluent"} ${isHighlighted ? "ai-highlight-row" : ""} ${rowLocked ? "planning-card-locked" : ""}`}
       onKeyDown={(e) => {
         if (readOnly) return;
+        if ((e.target as HTMLElement).closest("[data-row-intent-editor]")) return;
         // Ctrl+Enter → add row below
         if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
           e.preventDefault();
@@ -259,6 +265,14 @@ export function PlanningRowCard({
             </CellActionRail>
           )}
         </div>
+        <RowIntentEditor
+          rowIndex={idx}
+          row={row}
+          demoStepsReadOnly={readOnly || rowLocked || actionsLocked}
+          framingBeatsReadOnly={readOnly || rowLocked}
+          onDemoStepsChange={(steps) => updateRow(idx, "demo_steps", steps)}
+          onFramingBeatsChange={(beats) => updateRow(idx, "framing_beats", beats)}
+        />
       </div>
       <div style={{ gridArea: "assets" }} role="group" aria-label={`Row ${idx + 1} assets`} className="script-table-td min-w-0">
         <span aria-hidden="true" className="planning-field-label">Assets</span>

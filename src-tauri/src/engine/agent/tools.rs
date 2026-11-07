@@ -2388,6 +2388,12 @@ fn apply_write_sketch_row_fields(
     if let Some(value) = item.get("motion_plan") {
         row.motion_plan = parse_write_sketch_row_field(value, "motion_plan", row_number)?;
     }
+    if let Some(value) = item.get("demo_steps") {
+        row.demo_steps = parse_write_sketch_row_field(value, "demo_steps", row_number)?;
+    }
+    if let Some(value) = item.get("framing_beats") {
+        row.framing_beats = parse_write_sketch_row_field(value, "framing_beats", row_number)?;
+    }
     Ok(())
 }
 
@@ -4437,6 +4443,10 @@ fn flatten_nodes(children: &[Value]) -> Vec<&Value> {
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
+#[path = "tools_intent_tests.rs"]
+mod intent_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::engine::draftline_adapter::CutReadyDraftlineAdapter;
@@ -4478,7 +4488,7 @@ mod tests {
         }
     }
 
-    fn write_test_sketch(root: &Path, rel: &str, row: PlanningRow) {
+    pub(super) fn write_test_sketch(root: &Path, rel: &str, row: PlanningRow) {
         let mut sketch = Sketch::new("Locked Tool Test", chrono::Utc::now());
         sketch.rows = vec![row];
         project::write_sketch(&sketch, &root.join(rel), root).unwrap();
@@ -4620,22 +4630,10 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         let mut sketch = Sketch::new("Intro", chrono::Utc::now());
         sketch.rows.push(PlanningRow {
-            id: String::new(),
             time: "0:00".into(),
-            duration_seconds: None,
             narrative: "Narrate".into(),
             demo_actions: "Act".into(),
-            screenshot: None,
-            visual: None,
-            motion_points: Vec::new(),
-            typing_spots: Vec::new(),
-            motion_plan: None,
-            design_plan: None,
-            narration: None,
-            narration_plan: None,
-            unknown_fields: Default::default(),
-            locked: false,
-            locks: Default::default(),
+            ..PlanningRow::new()
         });
         let sketch_path = root.join("intro.sk");
         project::write_sketch(&sketch, &sketch_path, &root).unwrap();

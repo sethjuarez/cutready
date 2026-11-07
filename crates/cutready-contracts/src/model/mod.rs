@@ -9,6 +9,12 @@ pub use context::*;
 pub mod planning_cell_locks;
 pub use planning_cell_locks::*;
 
+pub mod demo_step;
+pub use demo_step::*;
+
+pub mod interaction_bounds;
+pub use interaction_bounds::*;
+
 pub mod motion_point;
 pub use motion_point::*;
 
@@ -20,6 +26,12 @@ pub use motion_plan_keyframe::*;
 
 pub mod motion_plan;
 pub use motion_plan::*;
+
+pub mod framing_beat;
+pub use framing_beat::*;
+
+pub mod framing_rect;
+pub use framing_rect::*;
 
 pub mod narration_asset;
 pub use narration_asset::*;

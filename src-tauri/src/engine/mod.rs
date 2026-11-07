@@ -11,6 +11,7 @@ pub mod document_writer;
 pub mod draftline_adapter;
 pub mod export;
 pub mod ffmpeg;
+pub mod frame_sequence;
 pub mod github_provider;
 pub mod identity;
 pub mod interaction;
@@ -28,6 +29,7 @@ pub(crate) mod recording_native_audio_windows;
 pub(crate) mod recording_native_camera_windows;
 #[cfg(target_os = "windows")]
 pub(crate) mod recording_native_windows;
+pub mod scenecast_adapter;
 pub mod speech;
 pub mod stray_git;
 pub mod video_import;

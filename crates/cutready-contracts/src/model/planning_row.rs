@@ -5,6 +5,10 @@
 
 use super::context::{LoadContext, SaveContext};
 
+use super::demo_step::DemoStep;
+
+use super::framing_beat::FramingBeat;
+
 use super::motion_plan::MotionPlan;
 
 use super::motion_point::MotionPoint;
@@ -32,6 +36,8 @@ pub struct PlanningRow {
     pub duration_seconds: Option<u32>,
     pub narrative: String,
     pub demo_actions: String,
+    /// Normalized walkthrough steps compiled from prose actions or rough recordings. Omitted when empty.
+    pub demo_steps: Option<Vec<DemoStep>>,
     /// Project-relative screenshot path. Legacy files may omit it; save writes `null` when unset.
     pub screenshot: Option<String>,
     /// Project-relative Elucim visual path (legacy files may inline the document). Opaque.
@@ -39,6 +45,8 @@ pub struct PlanningRow {
     pub motion_points: Option<Vec<MotionPoint>>,
     pub typing_spots: Option<Vec<TypingSpot>>,
     pub motion_plan: Option<MotionPlan>,
+    /// Editorial camera/framing beats; t_ms is row-relative. Omitted when empty.
+    pub framing_beats: Option<Vec<FramingBeat>>,
     /// Designer brief for the visual.
     pub design_plan: Option<String>,
     pub narration: Option<NarrationAsset>,
@@ -97,11 +105,13 @@ impl PlanningRow {
             duration_seconds: value.get("duration_seconds").and_then(|v| v.as_u64().and_then(|n| u32::try_from(n).ok())),
             narrative: value.get("narrative").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
             demo_actions: value.get("demo_actions").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+            demo_steps: value.get("demo_steps").map(|v| Self::load_demo_steps(v, ctx)),
             screenshot: value.get("screenshot").and_then(|v| v.as_str()).map(|s| s.to_string()),
             visual: value.get("visual").cloned(),
             motion_points: value.get("motion_points").map(|v| Self::load_motion_points(v, ctx)),
             typing_spots: value.get("typing_spots").map(|v| Self::load_typing_spots(v, ctx)),
             motion_plan: value.get("motion_plan").filter(|v| v.is_object() || v.is_array() || v.is_string()).map(|v| MotionPlan::load_from_value(v, ctx)),
+            framing_beats: value.get("framing_beats").map(|v| Self::load_framing_beats(v, ctx)),
             design_plan: value.get("design_plan").and_then(|v| v.as_str()).map(|s| s.to_string()),
             narration: value.get("narration").filter(|v| v.is_object() || v.is_array() || v.is_string()).map(|v| NarrationAsset::load_from_value(v, ctx)),
             narration_plan: value.get("narration_plan").filter(|v| v.is_object() || v.is_array() || v.is_string()).map(|v| NarrationPlan::load_from_value(v, ctx)),
@@ -111,7 +121,7 @@ impl PlanningRow {
 
     /// True when `key` is a declared wire key for the given discriminator value.
     fn additional_properties_known_key(kind: &str, key: &str) -> bool {
-        matches!(key, "id" | "locked" | "locks" | "time" | "duration_seconds" | "narrative" | "demo_actions" | "screenshot" | "visual" | "motion_points" | "typing_spots" | "motion_plan" | "design_plan" | "narration" | "narration_plan")
+        matches!(key, "id" | "locked" | "locks" | "time" | "duration_seconds" | "narrative" | "demo_actions" | "demo_steps" | "screenshot" | "visual" | "motion_points" | "typing_spots" | "motion_plan" | "framing_beats" | "design_plan" | "narration" | "narration_plan")
     }
 
     fn capture_additional_properties(value: &serde_json::Value, kind: &str) -> serde_json::Map<String, serde_json::Value> {
@@ -132,6 +142,13 @@ impl PlanningRow {
         if let Some(child) = value.get("locks").filter(|candidate| !candidate.is_null()) {
             PlanningCellLocks::validate_input_at(child, &child_path)?;
         }
+        if let Some(entries) = value.get("demo_steps").and_then(|candidate| candidate.as_array()) {
+            let collection_path = if path.is_empty() { "demo_steps".to_string() } else { format!("{}.{}", path, "demo_steps") };
+            for (index, entry) in entries.iter().enumerate() {
+                let entry_path = format!("{}[{}]", collection_path, index);
+                DemoStep::validate_input_at(entry, &entry_path)?;
+            }
+        }
         if let Some(entries) = value.get("motion_points").and_then(|candidate| candidate.as_array()) {
             let collection_path = if path.is_empty() { "motion_points".to_string() } else { format!("{}.{}", path, "motion_points") };
             for (index, entry) in entries.iter().enumerate() {
@@ -149,6 +166,13 @@ impl PlanningRow {
         let child_path = if path.is_empty() { "motion_plan".to_string() } else { format!("{}.{}", path, "motion_plan") };
         if let Some(child) = value.get("motion_plan").filter(|candidate| !candidate.is_null()) {
             MotionPlan::validate_input_at(child, &child_path)?;
+        }
+        if let Some(entries) = value.get("framing_beats").and_then(|candidate| candidate.as_array()) {
+            let collection_path = if path.is_empty() { "framing_beats".to_string() } else { format!("{}.{}", path, "framing_beats") };
+            for (index, entry) in entries.iter().enumerate() {
+                let entry_path = format!("{}[{}]", collection_path, index);
+                FramingBeat::validate_input_at(entry, &entry_path)?;
+            }
         }
         let child_path = if path.is_empty() { "narration".to_string() } else { format!("{}.{}", path, "narration") };
         if let Some(child) = value.get("narration").filter(|candidate| !candidate.is_null()) {
@@ -185,6 +209,9 @@ impl PlanningRow {
         }
         result.insert("narrative".to_string(), serde_json::Value::String(self.narrative.clone()));
         result.insert("demo_actions".to_string(), serde_json::Value::String(self.demo_actions.clone()));
+        if let Some(items) = self.demo_steps.as_ref() {
+            result.insert("demo_steps".to_string(), Self::save_demo_steps(items, ctx));
+        }
         result.insert("screenshot".to_string(), serde_json::Value::Null);
         if let Some(val) = self.screenshot.as_ref() {
             result.insert("screenshot".to_string(), serde_json::Value::String(val.clone()));
@@ -203,6 +230,9 @@ impl PlanningRow {
             if !nested.is_null() {
                 result.insert("motion_plan".to_string(), nested);
             }
+        }
+        if let Some(items) = self.framing_beats.as_ref() {
+            result.insert("framing_beats".to_string(), Self::save_framing_beats(items, ctx));
         }
         if let Some(val) = self.design_plan.as_ref() {
             result.insert("design_plan".to_string(), serde_json::Value::String(val.clone()));
@@ -236,6 +266,26 @@ impl PlanningRow {
     /// Serialize PlanningRow to a YAML string.
     pub fn to_yaml(&self, ctx: &SaveContext) -> Result<String, serde_yaml::Error> {
         serde_yaml::to_string(&self.to_value(ctx))
+    }
+
+    /// Load a collection of DemoStep from a JSON value.
+    /// Handles both array format `[{...}]`.
+    fn load_demo_steps(data: &serde_json::Value, ctx: &LoadContext) -> Vec<DemoStep> {
+        match data {
+            serde_json::Value::Array(arr) => {
+                arr.iter().map(|v| DemoStep::load_from_value(v, ctx)).collect()
+            }
+
+            _ => Vec::new(),
+
+        }
+    }
+
+    /// Save a collection of DemoStep to a JSON value.
+    fn save_demo_steps(items: &[DemoStep], ctx: &SaveContext) -> serde_json::Value {
+
+        serde_json::Value::Array(items.iter().map(|item| item.to_value(ctx)).collect::<Vec<_>>())
+
     }
 
     /// Load a collection of MotionPoint from a JSON value.
@@ -273,6 +323,26 @@ impl PlanningRow {
 
     /// Save a collection of TypingSpot to a JSON value.
     fn save_typing_spots(items: &[TypingSpot], ctx: &SaveContext) -> serde_json::Value {
+
+        serde_json::Value::Array(items.iter().map(|item| item.to_value(ctx)).collect::<Vec<_>>())
+
+    }
+
+    /// Load a collection of FramingBeat from a JSON value.
+    /// Handles both array format `[{...}]`.
+    fn load_framing_beats(data: &serde_json::Value, ctx: &LoadContext) -> Vec<FramingBeat> {
+        match data {
+            serde_json::Value::Array(arr) => {
+                arr.iter().map(|v| FramingBeat::load_from_value(v, ctx)).collect()
+            }
+
+            _ => Vec::new(),
+
+        }
+    }
+
+    /// Save a collection of FramingBeat to a JSON value.
+    fn save_framing_beats(items: &[FramingBeat], ctx: &SaveContext) -> serde_json::Value {
 
         serde_json::Value::Array(items.iter().map(|item| item.to_value(ctx)).collect::<Vec<_>>())
 

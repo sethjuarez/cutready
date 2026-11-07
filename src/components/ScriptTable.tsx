@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
-import type { MotionPoint, PlanningCellField, PlanningRow, TypingSpot } from "../types/sketch";
+import type { DemoStep, FramingBeat, MotionPoint, PlanningCellField, PlanningRow, TypingSpot } from "../types/sketch";
 import { normalizeDocument } from "@elucim/dsl";
 import type { CutReadyElucimDocument } from "../types/elucim";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -307,16 +307,16 @@ export function ScriptTable({ rows, onChange, readOnly = false, onCaptureScreens
   );
 
   const updateRow = useCallback(
-    (index: number, field: keyof PlanningRow, value: string) => {
-      if (rowsRef.current[index]?.locked || rowsRef.current[index]?.locks?.[field as PlanningCellField]) return;
+    (index: number, field: keyof PlanningRow, value: string | DemoStep[] | FramingBeat[] | null) => {
+      if (rowsRef.current[index]?.locked || rowsRef.current[index]?.locks?.[(field === "demo_steps" ? "demo_actions" : field) as PlanningCellField]) return;
       pushUndo();
       const updated = rowsRef.current.map((r, i) => {
         if (i !== index) return r;
         if (field === "time") {
-          return setRowTime(r, value);
+          return setRowTime(r, value as string);
         }
         if (field === "screenshot") {
-          return { ...r, screenshot: value || null, motion_points: value ? r.motion_points : null, typing_spots: value ? r.typing_spots : null, motion_plan: null };
+          return { ...r, screenshot: (value as string) || null, motion_points: value ? r.motion_points : null, typing_spots: value ? r.typing_spots : null, motion_plan: null };
         }
         return { ...r, [field]: value };
       });

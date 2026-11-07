@@ -357,7 +357,7 @@ pub(crate) fn field_matches(old: &PlanningRow, new: &PlanningRow, field: &str) -
     match field {
         "time" => old.time == new.time,
         "narrative" => old.narrative == new.narrative,
-        "demo_actions" => old.demo_actions == new.demo_actions,
+        "demo_actions" => old.demo_actions == new.demo_actions && old.demo_steps == new.demo_steps,
         "screenshot" | "visual" => old.screenshot == new.screenshot && old.visual == new.visual,
         "design_plan" => old.design_plan == new.design_plan,
         _ => true,
@@ -368,6 +368,44 @@ pub(crate) fn field_matches(old: &PlanningRow, new: &PlanningRow, field: &str) -
 mod tests {
     use super::*;
     use crate::testing::test_now;
+
+    #[test]
+    fn locked_row_rejects_compiled_intent_change() {
+        let mut old = PlanningRow::new();
+        old.locked = true;
+        old.demo_steps = vec![crate::models::sketch::DemoStep::Click {
+            target: "Generate".into(),
+            target_bounds: None,
+            capture: None,
+        }];
+        let mut new = old.clone();
+        new.demo_steps.clear();
+
+        assert!(matches!(
+            check_rows_update(&[old], &[new]),
+            Err(SketchEditError::LockedRow { row_index: 0 })
+        ));
+    }
+
+    #[test]
+    fn locked_actions_cell_rejects_demo_steps_change() {
+        let mut old = PlanningRow::new();
+        old.locks.demo_actions = true;
+        let mut new = old.clone();
+        new.demo_steps = vec![crate::models::sketch::DemoStep::Click {
+            target: "Generate".into(),
+            target_bounds: None,
+            capture: None,
+        }];
+
+        assert!(matches!(
+            check_rows_update(&[old], &[new]),
+            Err(SketchEditError::LockedCell {
+                row_index: 0,
+                field: "demo_actions"
+            })
+        ));
+    }
 
     #[test]
     fn edit_errors_map_to_the_contract_envelope() {

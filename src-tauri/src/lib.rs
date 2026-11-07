@@ -532,6 +532,7 @@ pub fn run() {
             commands::project::resolve_deep_link,
             commands::export::export_markdown_to_word,
             commands::export::export_sketch_video,
+            commands::export::inspect_resolved_demo,
             commands::diagnostics::dump_diagnostics,
             commands::diagnostics::get_diagnostics_policy,
             commands::diagnostics::get_auditaur_diagnostics,

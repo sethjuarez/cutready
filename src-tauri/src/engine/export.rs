@@ -1,6 +1,7 @@
 //! Export engine — rendered media and output folder assembly.
 
 use std::{
+    collections::HashSet,
     ffi::OsStr,
     fs,
     io::{Read, Write},
@@ -8,12 +9,29 @@ use std::{
     sync::OnceLock,
 };
 
+use anyhow::Context;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::engine::{ffmpeg, narration_preview, project};
-use cutready_core::models::sketch::{MotionPlan, MotionPlanKeyframe, Sketch, TypingSpot};
+use crate::{
+    engine::{
+        animation, ffmpeg,
+        frame_sequence::{
+            plan_frame_sequence, FrameManifestEntry, FrameSequenceFit, FrameSequencePlan,
+        },
+        narration_preview, project, scenecast_adapter,
+    },
+    models::resolved_demo::{ResolvedDemo, ResolvedDemoDiagnostic, RESOLVED_DEMO_SCHEMA_VERSION},
+};
+use cutready_core::models::sketch::{
+    MotionPlan, MotionPlanKeyframe, NarrationAsset, PlanningRow, Sketch, TypingSpot,
+};
+
+mod resolved_demo;
+
+use resolved_demo::*;
+pub use resolved_demo::{inspect_resolved_demo, ResolvedDemoInspection};
 
 const EXPORTS_DIR: &str = "exports";
 const TEMP_DIR: &str = ".cutready/exports/tmp";
@@ -103,6 +121,12 @@ pub struct SketchVideoExportSettings {
     pub row_transition_dip_seconds: f64,
     #[serde(default = "default_narration_tail_hold_seconds")]
     pub narration_tail_hold_seconds: f64,
+    #[serde(default)]
+    pub resolved_demo_path: Option<String>,
+    #[serde(default)]
+    pub generate_resolved_demo: bool,
+    #[serde(default)]
+    pub visual_frame_manifest_paths: Vec<Option<String>>,
     #[serde(default = "default_motion_max_scale")]
     pub motion_max_scale: f64,
     #[serde(default = "default_video_width")]
@@ -137,6 +161,9 @@ impl Default for SketchVideoExportSettings {
             final_hold_seconds: DEFAULT_FINAL_HOLD_DURATION_SECONDS,
             row_transition_dip_seconds: DEFAULT_ROW_TRANSITION_DIP_SECONDS,
             narration_tail_hold_seconds: DEFAULT_NARRATION_TAIL_HOLD_SECONDS,
+            resolved_demo_path: None,
+            generate_resolved_demo: false,
+            visual_frame_manifest_paths: Vec::new(),
             motion_max_scale: DEFAULT_MOTION_MAX_SCALE,
             video_width: DEFAULT_VIDEO_WIDTH,
             video_height: DEFAULT_VIDEO_HEIGHT,
@@ -180,6 +207,21 @@ impl SketchVideoExportSettings {
                 self.narration_tail_hold_seconds,
                 DEFAULT_NARRATION_TAIL_HOLD_SECONDS,
             ),
+            resolved_demo_path: self
+                .resolved_demo_path
+                .as_ref()
+                .map(|path| path.trim().to_string())
+                .filter(|path| !path.is_empty()),
+            generate_resolved_demo: self.generate_resolved_demo,
+            visual_frame_manifest_paths: self
+                .visual_frame_manifest_paths
+                .iter()
+                .map(|path| {
+                    path.as_ref()
+                        .map(|path| path.trim().to_string())
+                        .filter(|path| !path.is_empty())
+                })
+                .collect(),
             motion_max_scale: sanitize_motion_max_scale(self.motion_max_scale),
             video_width: sanitize_video_dimension(self.video_width, DEFAULT_VIDEO_WIDTH),
             video_height: sanitize_video_dimension(self.video_height, DEFAULT_VIDEO_HEIGHT),
@@ -214,8 +256,29 @@ struct RowSegment {
     audio_start_seconds: f64,
     audio_duration_seconds: f64,
     duration_seconds: f64,
+    frame_sequence: Option<FrameSequencePlan>,
     motion_plan: Option<MotionPlan>,
     typing_spots: Vec<TypingSpot>,
+}
+
+/// Planned timeline buckets before ffmpeg frame quantization and media probing.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct ExportTimelineTiming {
+    title_card_seconds: f64,
+    lead_in_seconds: f64,
+    row_content_seconds: f64,
+    interior_transition_seconds: f64,
+    final_hold_seconds: f64,
+}
+
+impl ExportTimelineTiming {
+    fn total_seconds(self) -> f64 {
+        self.title_card_seconds
+            + self.lead_in_seconds
+            + self.row_content_seconds
+            + self.interior_transition_seconds
+            + self.final_hold_seconds
+    }
 }
 
 #[allow(dead_code)]
@@ -405,33 +468,22 @@ where
         .ok_or_else(|| anyhow::anyhow!("Export output path has no parent directory"))?;
     fs::create_dir_all(output_dir)?;
 
-    let segments = collect_row_segments(project_root, &sketch, &settings)?;
-
-    ensure_ffmpeg_available()?;
-    let gap_count = segments.len().saturating_sub(1);
-    let title_step_count = usize::from(settings.include_title_card);
-    let background_music_step_count = usize::from(settings.background_music_path.is_some());
-    let total_steps =
-        title_step_count + 1 + segments.len() + gap_count + 1 + 1 + background_music_step_count;
-    let title_card_duration_seconds = if settings.include_title_card {
-        settings.title_card_duration_seconds
-    } else {
-        0.0
-    };
-    let duration_seconds = title_card_duration_seconds
-        + segments
-            .iter()
-            .map(|segment| segment.duration_seconds)
-            .sum::<f64>()
-        + settings.title_to_first_row_hold_seconds
-        + (gap_count as f64 * settings.row_transition_hold_seconds)
-        + settings.final_hold_seconds;
-
     let work_relative = format!("{TEMP_DIR}/{}", Utc::now().format("%Y%m%d-%H%M%S-%3f"));
     let work_dir = project::safe_resolve(project_root, &work_relative)?;
     fs::create_dir_all(&work_dir)?;
 
     let result = (|| {
+        ensure_ffmpeg_available()?;
+        let segments =
+            collect_row_segments(project_root, &work_dir, sketch_path, &sketch, &settings)?;
+
+        let gap_count = segments.len().saturating_sub(1);
+        let title_step_count = usize::from(settings.include_title_card);
+        let background_music_step_count = usize::from(settings.background_music_path.is_some());
+        let total_steps =
+            title_step_count + 1 + segments.len() + gap_count + 1 + 1 + background_music_step_count;
+        let timeline_timing = export_timeline_timing(&segments, &settings);
+        let duration_seconds = timeline_timing.total_seconds();
         let mut segment_files = Vec::with_capacity(segments.len() + (gap_count * 2) + 3);
         let mut current_step = 0;
         if settings.include_title_card {
@@ -485,7 +537,7 @@ where
                 format!("Rendering row {} of {}", segment.row_number, segments.len()),
             );
             let segment_output = work_dir.join(format!("row-{:03}.mp4", segment.row_number));
-            render_segment(segment, &segment_output, &settings)?;
+            render_segment(segment, &segment_output, &work_dir, &settings)?;
             segment_files.push(segment_output);
             if index + 1 < segments.len() {
                 let next_segment = &segments[index + 1];
@@ -581,7 +633,7 @@ where
                 "Mixing background music",
             );
         }
-        Ok::<_, anyhow::Error>(())
+        Ok::<_, anyhow::Error>((segments.len(), duration_seconds, total_steps))
     })();
 
     if let Err(cleanup_error) = fs::remove_dir_all(&work_dir) {
@@ -593,7 +645,7 @@ where
         );
     }
 
-    result?;
+    let (row_count, duration_seconds, total_steps) = result?;
 
     emit_progress(
         &mut on_progress,
@@ -605,8 +657,8 @@ where
     tracing::info!(
         target: "cutready::export",
         sketch_path = %sketch_path,
-    output_path = %output_path.display(),
-        row_count = segments.len(),
+        output_path = %output_path.display(),
+        row_count,
         duration_seconds,
         "exported sketch video"
     );
@@ -614,7 +666,7 @@ where
     Ok(SketchVideoExport {
         path: output_path.to_string_lossy().to_string(),
         duration_seconds,
-        row_count: segments.len(),
+        row_count,
     })
 }
 
@@ -718,6 +770,8 @@ fn render_title_card(
 
 fn collect_row_segments(
     project_root: &Path,
+    work_dir: &Path,
+    sketch_path: &str,
     sketch: &Sketch,
     settings: &SketchVideoExportSettings,
 ) -> anyhow::Result<Vec<RowSegment>> {
@@ -725,26 +779,19 @@ fn collect_row_segments(
         anyhow::bail!("Sketch has no rows to export");
     }
 
+    let resolved_demo =
+        load_or_generate_resolved_demo(project_root, work_dir, sketch_path, sketch, settings)?;
+
     sketch
         .rows
         .iter()
         .enumerate()
         .map(|(index, row)| {
-            let screenshot = row
-                .screenshot
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .ok_or_else(|| anyhow::anyhow!("Row {} has no screenshot", index + 1))?;
-            let image_path = project::safe_resolve(project_root, screenshot)?;
-            if !image_path.is_file() {
-                anyhow::bail!("Row {} screenshot does not exist: {screenshot}", index + 1);
-            }
-
             let narration = row
                 .narration
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("Row {} has no narration", index + 1))?;
+            validate_narration_fresh(index + 1, row, narration)?;
             let narration_path = project::safe_resolve(project_root, &narration.path)?;
             if !narration_path.is_file() {
                 anyhow::bail!(
@@ -780,15 +827,139 @@ fn collect_row_segments(
                 narration.leading_silence_ms,
                 narration.trailing_silence_ms,
             );
-            let duration_seconds = audio_duration_seconds + settings.narration_tail_hold_seconds;
+            let row_number = index + 1;
+            let resolved_demo_seconds = resolved_demo
+                .as_ref()
+                .and_then(|loaded| loaded.demo.row_playback_duration_seconds(row_number))
+                .unwrap_or(0.0);
+            let duration_seconds = row_content_duration_seconds(
+                audio_duration_seconds,
+                resolved_demo_seconds,
+                settings,
+            );
+            let visual_path = row
+                .visual
+                .as_ref()
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty());
+            if visual_path.is_some() && (!row.typing_spots.is_empty() || row.motion_plan.is_some())
+            {
+                anyhow::bail!(
+                    "Row {} cannot combine visual frame rendering with typing spots or a motion plan",
+                    row_number
+                );
+            }
+            let frame_sequence = settings
+                .visual_frame_manifest_paths
+                .get(index)
+                .and_then(Option::as_deref)
+                .map(|path| {
+                    load_visual_frame_sequence(
+                        project_root,
+                        path,
+                        duration_seconds,
+                        settings.video_fps,
+                    )
+                })
+                .transpose()?;
+            let frame_sequence = if frame_sequence.is_none() {
+                visual_path
+                    .map(|visual_path| {
+                        let output_dir =
+                            work_dir.join(format!("row-{row_number:03}-elucim-frames"));
+                        let manifest = animation::render_visual_frame_manifest(
+                            project_root,
+                            visual_path,
+                            &output_dir,
+                            settings.video_fps,
+                        )?;
+                        tracing::info!(
+                            target: "cutready::export",
+                            row = row_number,
+                            visual = %visual_path,
+                            frame_count = manifest.frame_count,
+                            "generated Elucim frame manifest"
+                        );
+                        load_visual_frame_sequence_from_manifest(
+                            &manifest.manifest_path,
+                            output_dir.as_path(),
+                            duration_seconds,
+                            settings.video_fps,
+                        )
+                    })
+                    .transpose()?
+            } else {
+                frame_sequence
+            };
+            let has_screenshot = row
+                .screenshot
+                .as_deref()
+                .is_some_and(|path| !path.trim().is_empty());
+            let frame_sequence = if frame_sequence.is_none() {
+                if row.typing_spots.is_empty() && row.motion_plan.is_none() {
+                    match resolved_demo.as_ref().map(|loaded| {
+                        resolved_demo_frame_sequence_for_row(
+                            loaded,
+                            row_number,
+                            duration_seconds,
+                            settings.video_fps,
+                        )
+                    }) {
+                        Some(Ok(sequence)) => sequence,
+                        Some(Err(error))
+                            if has_screenshot && is_missing_resolved_demo_asset_error(&error) =>
+                        {
+                            tracing::warn!(
+                                target: "cutready::export",
+                                row = row_number,
+                                error = %error,
+                                "could not load resolved-demo media; falling back to row screenshot"
+                            );
+                            None
+                        }
+                        Some(Err(error)) => return Err(error),
+                        None => None,
+                    }
+                } else {
+                    None
+                }
+            } else {
+                frame_sequence
+            };
+            if frame_sequence.is_some() && (!row.typing_spots.is_empty() || row.motion_plan.is_some()) {
+                anyhow::bail!(
+                    "Row {} cannot combine visual frame rendering with typing spots or a motion plan",
+                    row_number
+                );
+            }
+            let image_path = if let Some(frame) = frame_sequence
+                .as_ref()
+                .and_then(|sequence| sequence.frames.first())
+            {
+                frame.path.clone()
+            } else {
+                let screenshot = row
+                    .screenshot
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .ok_or_else(|| anyhow::anyhow!("Row {} has no screenshot", index + 1))?;
+                let image_path = project::safe_resolve(project_root, screenshot)?;
+                if !image_path.is_file() {
+                    anyhow::bail!("Row {} screenshot does not exist: {screenshot}", index + 1);
+                }
+                image_path
+            };
 
             Ok(RowSegment {
-                row_number: index + 1,
+                row_number,
                 image_path,
                 narration_path,
                 audio_start_seconds,
                 audio_duration_seconds,
                 duration_seconds,
+                frame_sequence,
                 motion_plan: row.motion_plan.clone(),
                 typing_spots: row.typing_spots.clone(),
             })
@@ -796,11 +967,200 @@ fn collect_row_segments(
         .collect()
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum VisualFrameManifestFile {
+    Wrapped {
+        frames: Vec<VisualFrameManifestEntry>,
+    },
+    Entries(Vec<VisualFrameManifestEntry>),
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct VisualFrameManifestEntry {
+    path: String,
+    #[serde(alias = "duration_ms")]
+    duration_ms: i64,
+    #[serde(default)]
+    terminal: bool,
+}
+
+fn load_visual_frame_sequence(
+    project_root: &Path,
+    manifest_relative_path: &str,
+    row_duration_seconds: f64,
+    fps: u32,
+) -> anyhow::Result<FrameSequencePlan> {
+    let manifest_path = project::safe_resolve(project_root, manifest_relative_path)?;
+    if !manifest_path.is_file() {
+        anyhow::bail!("Visual frame manifest does not exist: {manifest_relative_path}");
+    }
+    let manifest_parent = Path::new(manifest_relative_path)
+        .parent()
+        .and_then(Path::to_str)
+        .filter(|path| !path.is_empty());
+    let entries = load_visual_frame_manifest_entries(&manifest_path, |frame_path| {
+        resolve_visual_frame_path(project_root, manifest_parent, frame_path)
+    })?;
+
+    plan_frame_sequence(&entries, row_duration_seconds, fps)
+}
+
+fn load_visual_frame_sequence_from_manifest(
+    manifest_path: &Path,
+    manifest_dir: &Path,
+    row_duration_seconds: f64,
+    fps: u32,
+) -> anyhow::Result<FrameSequencePlan> {
+    let entries = load_visual_frame_manifest_entries(manifest_path, |frame_path| {
+        resolve_generated_visual_frame_path(manifest_dir, frame_path)
+    })?;
+
+    plan_frame_sequence(&entries, row_duration_seconds, fps)
+}
+
+fn load_visual_frame_manifest_entries(
+    manifest_path: &Path,
+    resolve_path: impl Fn(&str) -> anyhow::Result<PathBuf>,
+) -> anyhow::Result<Vec<FrameManifestEntry>> {
+    let manifest: VisualFrameManifestFile = serde_json::from_reader(fs::File::open(manifest_path)?)
+        .map_err(|error| anyhow::anyhow!("Could not parse visual frame manifest: {error}"))?;
+    let entries = match manifest {
+        VisualFrameManifestFile::Wrapped { frames } | VisualFrameManifestFile::Entries(frames) => {
+            frames
+        }
+    };
+
+    entries
+        .into_iter()
+        .map(|entry| {
+            let path = resolve_path(&entry.path)?;
+            if !path.is_file() {
+                anyhow::bail!("Visual frame image does not exist: {}", entry.path);
+            }
+            Ok(FrameManifestEntry {
+                path,
+                duration_ms: entry.duration_ms,
+                terminal: entry.terminal,
+            })
+        })
+        .collect()
+}
+
+fn resolve_visual_frame_path(
+    project_root: &Path,
+    manifest_parent: Option<&str>,
+    frame_path: &str,
+) -> anyhow::Result<PathBuf> {
+    let trimmed = frame_path.trim();
+    if trimmed.is_empty() {
+        anyhow::bail!("Visual frame path must not be empty");
+    }
+    if let Some(manifest_parent) = manifest_parent {
+        let manifest_relative = Path::new(manifest_parent).join(trimmed);
+        let manifest_relative =
+            project::safe_resolve(project_root, manifest_relative.to_string_lossy().as_ref())?;
+        if manifest_relative.is_file() {
+            return Ok(manifest_relative);
+        }
+    }
+    project::safe_resolve(project_root, trimmed).map_err(Into::into)
+}
+
+fn resolve_generated_visual_frame_path(
+    manifest_dir: &Path,
+    frame_path: &str,
+) -> anyhow::Result<PathBuf> {
+    let trimmed = frame_path.trim();
+    if trimmed.is_empty() {
+        anyhow::bail!("Visual frame path must not be empty");
+    }
+    let path = Path::new(trimmed);
+    if path.is_absolute()
+        || path.components().any(|component| {
+            matches!(
+                component,
+                std::path::Component::ParentDir | std::path::Component::Prefix(_)
+            )
+        })
+    {
+        anyhow::bail!("Generated visual frame path must be relative: {trimmed}");
+    }
+    Ok(manifest_dir.join(path))
+}
+
+fn row_content_duration_seconds(
+    audio_duration_seconds: f64,
+    resolved_demo_seconds: f64,
+    settings: &SketchVideoExportSettings,
+) -> f64 {
+    audio_duration_seconds.max(resolved_demo_seconds) + settings.narration_tail_hold_seconds
+}
+
+fn validate_narration_fresh(
+    row_number: usize,
+    row: &PlanningRow,
+    narration: &NarrationAsset,
+) -> anyhow::Result<()> {
+    if let Some(narrative_text) = narration.narrative_text.as_deref() {
+        if narrative_text != row.narrative {
+            anyhow::bail!(
+                "Row {row_number} narration is stale; rerecord or regenerate narration after editing the narrative"
+            );
+        }
+    }
+
+    if let Some(narrative_text_hash) = narration.narrative_text_hash.as_deref() {
+        if narrative_text_hash.len() != 64 {
+            return Ok(());
+        }
+        let current_hash = sha256_hex(&row.narrative);
+        if !narrative_text_hash.eq_ignore_ascii_case(&current_hash) {
+            anyhow::bail!(
+                "Row {row_number} narration fingerprint is stale; rerecord or regenerate narration after editing the narrative"
+            );
+        }
+    }
+    Ok(())
+}
+
+fn sha256_hex(value: &str) -> String {
+    let digest = Sha256::digest(value.as_bytes());
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn export_timeline_timing(
+    segments: &[RowSegment],
+    settings: &SketchVideoExportSettings,
+) -> ExportTimelineTiming {
+    let gap_count = segments.len().saturating_sub(1);
+    ExportTimelineTiming {
+        title_card_seconds: if settings.include_title_card {
+            settings.title_card_duration_seconds
+        } else {
+            0.0
+        },
+        lead_in_seconds: settings.title_to_first_row_hold_seconds,
+        row_content_seconds: segments
+            .iter()
+            .map(|segment| segment.duration_seconds)
+            .sum(),
+        interior_transition_seconds: gap_count as f64 * settings.row_transition_hold_seconds,
+        final_hold_seconds: settings.final_hold_seconds,
+    }
+}
+
 fn render_segment(
     segment: &RowSegment,
     output_path: &Path,
+    work_dir: &Path,
     settings: &SketchVideoExportSettings,
 ) -> anyhow::Result<()> {
+    if segment.frame_sequence.is_some() {
+        return render_frame_sequence_segment(segment, output_path, work_dir, settings);
+    }
+
     let duration = format_duration(segment.duration_seconds);
     let audio_duration = format_duration(segment.audio_duration_seconds);
     let audio_start = format_seconds(segment.audio_start_seconds);
@@ -832,6 +1192,7 @@ fn render_segment(
             duration.clone(),
         ]);
     }
+
     args.extend([
         "-i".to_string(),
         segment.image_path.to_string_lossy().to_string(),
@@ -872,6 +1233,172 @@ fn render_segment(
         output_path.to_string_lossy().to_string(),
     ]);
     run_ffmpeg(args)
+}
+
+fn render_frame_sequence_segment(
+    segment: &RowSegment,
+    output_path: &Path,
+    work_dir: &Path,
+    settings: &SketchVideoExportSettings,
+) -> anyhow::Result<()> {
+    let sequence = segment
+        .frame_sequence
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("Row {} has no frame sequence", segment.row_number))?;
+    if let FrameSequenceFit::Truncated {
+        dropped_frames,
+        lost_seconds,
+    } = sequence.fit
+    {
+        tracing::warn!(
+            row = segment.row_number,
+            dropped_frames,
+            lost_seconds,
+            "Elucim frame sequence is longer than the row and will be truncated"
+        );
+    }
+
+    let frame_dir = work_dir.join(format!("row-{:03}-frames", segment.row_number));
+    fs::create_dir_all(&frame_dir)?;
+    let frame_counts = planned_frame_counts(sequence, settings.video_fps)?;
+    let mut frame_segments = Vec::with_capacity(frame_counts.len());
+    for (index, (frame, frame_count)) in sequence.frames.iter().zip(frame_counts).enumerate() {
+        if frame_count == 0 {
+            continue;
+        }
+        let frame_output = frame_dir.join(format!("frame-{index:04}.mp4"));
+        render_frame_image_segment(&frame.path, frame_count, &frame_output, settings)?;
+        frame_segments.push(frame_output);
+    }
+
+    let visual_output = work_dir.join(format!("row-{:03}-visual.mp4", segment.row_number));
+    concatenate_plain_segments(&frame_dir, &frame_segments, &visual_output, settings)?;
+
+    let duration = format_duration(segment.duration_seconds);
+    let audio_duration = format_duration(segment.audio_duration_seconds);
+    let audio_start = format_seconds(segment.audio_start_seconds);
+    let af = narration_audio_filter(&audio_start, &audio_duration, &duration);
+    run_ffmpeg(vec![
+        "-y".to_string(),
+        "-hide_banner".to_string(),
+        "-loglevel".to_string(),
+        "warning".to_string(),
+        "-i".to_string(),
+        visual_output.to_string_lossy().to_string(),
+        "-i".to_string(),
+        segment.narration_path.to_string_lossy().to_string(),
+        "-t".to_string(),
+        duration,
+        "-map".to_string(),
+        "0:v:0".to_string(),
+        "-map".to_string(),
+        "1:a:0".to_string(),
+        "-af".to_string(),
+        af,
+        "-c:v".to_string(),
+        "copy".to_string(),
+        "-c:a".to_string(),
+        "aac".to_string(),
+        "-b:a".to_string(),
+        "160k".to_string(),
+        "-movflags".to_string(),
+        "+faststart".to_string(),
+        output_path.to_string_lossy().to_string(),
+    ])
+}
+
+fn planned_frame_counts(sequence: &FrameSequencePlan, fps: u32) -> anyhow::Result<Vec<u32>> {
+    if fps == 0 {
+        anyhow::bail!("Video FPS must be greater than zero");
+    }
+    let total_frames = ((sequence.total_seconds * f64::from(fps)).round() as i64).max(1);
+    let positive_indices = sequence
+        .frames
+        .iter()
+        .enumerate()
+        .filter(|(_, frame)| frame.duration_seconds > f64::EPSILON)
+        .map(|(index, _)| index)
+        .collect::<Vec<_>>();
+    if positive_indices.is_empty() {
+        anyhow::bail!("Frame sequence has no positive-duration frames");
+    }
+
+    let mut counts = vec![0; sequence.frames.len()];
+    let mut allocated = 0i64;
+    for (ordinal, index) in positive_indices.iter().enumerate() {
+        let remaining_positive = positive_indices.len() - ordinal - 1;
+        let frame = &sequence.frames[*index];
+        let count = if remaining_positive == 0 {
+            total_frames - allocated
+        } else {
+            let remaining_floor = remaining_positive as i64;
+            let rounded = (frame.duration_seconds * f64::from(fps)).round() as i64;
+            rounded
+                .max(1)
+                .min((total_frames - allocated - remaining_floor).max(1))
+        };
+        counts[*index] = count.max(0) as u32;
+        allocated += count.max(0);
+    }
+    Ok(counts)
+}
+
+fn render_frame_image_segment(
+    image_path: &Path,
+    frame_count: u32,
+    output_path: &Path,
+    settings: &SketchVideoExportSettings,
+) -> anyhow::Result<()> {
+    if frame_count == 0 {
+        anyhow::bail!("Frame segment must contain at least one frame");
+    }
+    let duration = format_seconds(f64::from(frame_count) / f64::from(settings.video_fps));
+    run_ffmpeg(vec![
+        "-y".to_string(),
+        "-hide_banner".to_string(),
+        "-loglevel".to_string(),
+        "warning".to_string(),
+        "-loop".to_string(),
+        "1".to_string(),
+        "-framerate".to_string(),
+        settings.video_fps.to_string(),
+        "-i".to_string(),
+        image_path.to_string_lossy().to_string(),
+        "-f".to_string(),
+        "lavfi".to_string(),
+        "-t".to_string(),
+        duration,
+        "-i".to_string(),
+        FfmpegFilterGraph::chain([FfmpegFilter::new("anullsrc")
+            .named("channel_layout", "stereo")
+            .named("sample_rate", "48000")])
+        .render(),
+        "-map".to_string(),
+        "0:v:0".to_string(),
+        "-map".to_string(),
+        "1:a:0".to_string(),
+        "-frames:v".to_string(),
+        frame_count.to_string(),
+        "-vf".to_string(),
+        FfmpegFilterGraph::chain(still_image_video_filters(&[], 0.0, true, settings)?).render(),
+        "-c:v".to_string(),
+        settings.video_encoder.clone(),
+        "-preset".to_string(),
+        "medium".to_string(),
+        "-tune".to_string(),
+        "stillimage".to_string(),
+        "-crf".to_string(),
+        settings.video_crf.clone(),
+        "-pix_fmt".to_string(),
+        settings.video_pixel_format.clone(),
+        "-c:a".to_string(),
+        "aac".to_string(),
+        "-b:a".to_string(),
+        "160k".to_string(),
+        "-movflags".to_string(),
+        "+faststart".to_string(),
+        output_path.to_string_lossy().to_string(),
+    ])
 }
 
 fn still_image_video_filter(
@@ -1593,8 +2120,11 @@ fn render_segment_hold(
     transition: HoldTransition,
     settings: &SketchVideoExportSettings,
 ) -> anyhow::Result<()> {
+    let image_path = segment_hold_image_path(segment);
     let base_filters = if hold_final_motion_frame {
-        if let Some(plan) = segment.motion_plan.as_ref() {
+        if segment.frame_sequence.is_some() {
+            still_image_video_filters(&[], duration_seconds, true, settings)?
+        } else if let Some(plan) = segment.motion_plan.as_ref() {
             motion_final_frame_video_filters(plan, &segment.typing_spots, settings)?
         } else {
             still_image_video_filters(&segment.typing_spots, duration_seconds, true, settings)?
@@ -1604,12 +2134,21 @@ fn render_segment_hold(
     };
     let filters = hold_video_filters(base_filters, duration_seconds, transition, settings);
     render_image_hold_segment_with_filter(
-        &segment.image_path,
+        image_path,
         duration_seconds,
         output_path,
         filters,
         settings,
     )
+}
+
+fn segment_hold_image_path(segment: &RowSegment) -> &Path {
+    segment
+        .frame_sequence
+        .as_ref()
+        .and_then(|sequence| sequence.frames.last())
+        .map(|frame| frame.path.as_path())
+        .unwrap_or(segment.image_path.as_path())
 }
 
 #[derive(Clone, Copy)]
@@ -1788,6 +2327,63 @@ fn concatenate_segments(
     }
 
     Ok(())
+}
+
+fn concatenate_plain_segments(
+    work_dir: &Path,
+    segment_files: &[PathBuf],
+    output_path: &Path,
+    settings: &SketchVideoExportSettings,
+) -> anyhow::Result<()> {
+    let list_path = work_dir.join("concat.txt");
+    let list = segment_files
+        .iter()
+        .map(|path| {
+            let name = path
+                .file_name()
+                .and_then(OsStr::to_str)
+                .ok_or_else(|| anyhow::anyhow!("Segment path has no valid file name"))?;
+            Ok(format!("file '{}'\n", name.replace('\'', "'\\''")))
+        })
+        .collect::<anyhow::Result<String>>()?;
+    fs::write(&list_path, list)?;
+
+    run_ffmpeg(vec![
+        "-y".to_string(),
+        "-hide_banner".to_string(),
+        "-loglevel".to_string(),
+        "warning".to_string(),
+        "-fflags".to_string(),
+        "+genpts".to_string(),
+        "-f".to_string(),
+        "concat".to_string(),
+        "-safe".to_string(),
+        "0".to_string(),
+        "-i".to_string(),
+        list_path.to_string_lossy().to_string(),
+        "-c:v".to_string(),
+        settings.video_encoder.clone(),
+        "-preset".to_string(),
+        "medium".to_string(),
+        "-crf".to_string(),
+        settings.video_crf.clone(),
+        "-pix_fmt".to_string(),
+        settings.video_pixel_format.clone(),
+        "-c:a".to_string(),
+        "aac".to_string(),
+        "-b:a".to_string(),
+        "160k".to_string(),
+        "-ar".to_string(),
+        "48000".to_string(),
+        "-af".to_string(),
+        FfmpegFilterGraph::chain([FfmpegFilter::new("aresample")
+            .named("async", "1")
+            .named("first_pts", "0")])
+        .render(),
+        "-movflags".to_string(),
+        "+faststart".to_string(),
+        output_path.to_string_lossy().to_string(),
+    ])
 }
 
 fn mix_background_music(
@@ -2690,864 +3286,5 @@ fn format_seconds(seconds: f64) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use cutready_core::models::sketch::{
-        MotionPlan, MotionPlanEasing, MotionPlanKeyframe, MotionPlanKind, NarrationAsset,
-        PlanningRow, Sketch, TypingSpot,
-    };
-    use image::{Rgb, RgbImage};
-    use tempfile::TempDir;
-
-    #[test]
-    fn slugify_returns_stable_file_safe_name() {
-        assert_eq!(slugify("Demo: Login Flow!"), "demo-login-flow");
-        assert_eq!(slugify("   "), "sketch");
-    }
-
-    #[test]
-    fn ffmpeg_failure_message_prefers_the_actionable_encoder_error() {
-        let lines = [
-            "Error opening output file C:\\demo\\row-001.mp4.",
-            "Error initializing output stream 0:0 -- Error while opening encoder for output stream #0:0",
-        ];
-
-        assert_eq!(
-            ffmpeg_failure_message(&lines),
-            "Error initializing output stream 0:0 -- Error while opening encoder for output stream #0:0"
-        );
-    }
-
-    #[test]
-    fn ffmpeg_filter_argument_finds_each_filter_form() {
-        let args = vec![
-            "-vf".to_string(),
-            "scale=1920:1080".to_string(),
-            "-af".to_string(),
-            "aresample=48000".to_string(),
-            "-filter_complex".to_string(),
-            "[0:a]anull[a]".to_string(),
-        ];
-
-        assert_eq!(
-            ffmpeg_filter_argument(&args, "-vf"),
-            Some("scale=1920:1080")
-        );
-        assert_eq!(
-            ffmpeg_filter_argument(&args, "-af"),
-            Some("aresample=48000")
-        );
-        assert_eq!(
-            ffmpeg_filter_argument(&args, "-filter_complex"),
-            Some("[0:a]anull[a]")
-        );
-        assert_eq!(ffmpeg_filter_argument(&args, "-filter_script"), None);
-    }
-
-    #[test]
-    fn large_filter_arguments_are_written_to_temporary_scripts() {
-        let filter = "null,".repeat(FFMPEG_FILTER_SCRIPT_THRESHOLD_BYTES / 4 + 1);
-        let mut args = vec!["-vf".to_string(), filter.clone()];
-
-        let scripts = offload_large_filter_arguments(&mut args, FilterFileSyntax::Legacy).unwrap();
-
-        assert_eq!(args[0], "-filter_script:v");
-        assert_eq!(scripts.len(), 1);
-        assert_eq!(fs::read_to_string(&scripts[0]).unwrap(), filter);
-    }
-
-    #[test]
-    fn large_filter_arguments_use_generic_syntax_on_modern_ffmpeg() {
-        let filter = "null,".repeat(FFMPEG_FILTER_SCRIPT_THRESHOLD_BYTES / 4 + 1);
-        let mut args = vec!["-vf".to_string(), filter.clone()];
-
-        let scripts = offload_large_filter_arguments(&mut args, FilterFileSyntax::Generic).unwrap();
-
-        // FFmpeg 9.0 removed `-filter_script`, so modern builds must receive the
-        // generic read-option-from-file flag instead.
-        assert_eq!(args[0], "-/vf");
-        assert_eq!(scripts.len(), 1);
-        assert_eq!(fs::read_to_string(&scripts[0]).unwrap(), filter);
-    }
-
-    #[test]
-    fn ffmpeg_major_version_parses_release_and_distro_forms() {
-        assert_eq!(
-            parse_ffmpeg_major_version("ffmpeg version 9.0.1-full_build-www.gyan.dev\n"),
-            Some(9)
-        );
-        assert_eq!(
-            parse_ffmpeg_major_version("ffmpeg version 6.1.1 Copyright (c) 2000-2023\n"),
-            Some(6)
-        );
-        assert_eq!(parse_ffmpeg_major_version("ffmpeg version n7.0\n"), Some(7));
-        // Non-dotted git builds are unparseable and fall back to legacy.
-        assert_eq!(
-            parse_ffmpeg_major_version("ffmpeg version N-119000-gabc123\n"),
-            None
-        );
-        assert_eq!(parse_ffmpeg_major_version("not ffmpeg output"), None);
-    }
-
-    #[test]
-    fn large_video_filter_script_runs_with_ffmpeg() {
-        if ensure_ffmpeg_available().is_err() {
-            return;
-        }
-        let directory = tempfile::tempdir().unwrap();
-        let output_path = directory.path().join("filter-script.mkv");
-        let filter = std::iter::repeat_n("null", FFMPEG_FILTER_SCRIPT_THRESHOLD_BYTES / 4 + 1)
-            .collect::<Vec<_>>()
-            .join(",");
-
-        run_ffmpeg(vec![
-            "-y".to_string(),
-            "-f".to_string(),
-            "lavfi".to_string(),
-            "-i".to_string(),
-            "color=black:s=16x16:r=1".to_string(),
-            "-vf".to_string(),
-            filter,
-            "-frames:v".to_string(),
-            "1".to_string(),
-            "-c:v".to_string(),
-            DEFAULT_VIDEO_ENCODER.to_string(),
-            "-crf".to_string(),
-            DEFAULT_VIDEO_CRF.to_string(),
-            "-pix_fmt".to_string(),
-            DEFAULT_VIDEO_PIXEL_FORMAT.to_string(),
-            output_path.to_string_lossy().to_string(),
-        ])
-        .unwrap();
-
-        assert!(output_path.is_file());
-    }
-
-    #[test]
-    fn typing_reveal_is_compressed_to_finish_within_the_row() {
-        let (start, characters_per_second, end) =
-            constrained_typing_timing(160, 7.0, None, 18.0, 3.0, 30);
-
-        assert!(start < 3.0);
-        assert!(characters_per_second > 18.0);
-        assert!((start + 160.0 / characters_per_second - end).abs() < 0.000_001);
-        assert_eq!(end, 3.0);
-    }
-
-    #[test]
-    fn typing_filters_reject_text_beyond_the_animation_limit() {
-        let spot = TypingSpot {
-            x: 0.2,
-            y: 0.3,
-            width: 0.4,
-            height: 0.1,
-            text: "x".repeat(MAX_TYPING_ANIMATION_CHARACTERS + 1),
-            start_offset_ms: None,
-            duration_ms: None,
-            characters_per_second: None,
-            show_cursor: None,
-            text_color: None,
-            font_family: None,
-            font_scale: None,
-        };
-
-        let error = typing_spot_filters(&[spot], 3.0, false, &SketchVideoExportSettings::default())
-            .err()
-            .expect("typing text over the limit must be rejected");
-
-        assert!(error.to_string().contains("up to 160 characters"));
-    }
-
-    #[test]
-    fn ffmpeg_expression_escapes_function_argument_delimiters() {
-        let expression = FfmpegExpression::call(
-            "if",
-            [
-                FfmpegExpression::call(
-                    "lte",
-                    [FfmpegExpression::raw("on"), FfmpegExpression::raw("60")],
-                ),
-                FfmpegExpression::call(
-                    "min",
-                    [
-                        FfmpegExpression::call(
-                            "max",
-                            [FfmpegExpression::raw("on-0"), FfmpegExpression::raw("0")],
-                        ),
-                        FfmpegExpression::raw("1"),
-                    ],
-                ),
-                FfmpegExpression::raw("0.862069"),
-            ],
-        );
-
-        assert_eq!(
-            expression.to_string(),
-            r"if(lte(on\,60)\,min(max(on-0\,0)\,1)\,0.862069)"
-        );
-    }
-
-    #[test]
-    fn ffmpeg_filter_builder_serializes_labels_values_and_chains() {
-        let text_path = ["font root", "demo's:font.txt"].iter().collect::<PathBuf>();
-        let mut graph = FfmpegFilterGraph::new();
-        graph.push_chain(FfmpegFilterChain::new([FfmpegFilter::new("drawtext")
-            .input("0:v")
-            .named("textfile", FfmpegValue::file_path(&text_path))
-            .named(
-                "enable",
-                FfmpegExpression::call(
-                    "between",
-                    [
-                        FfmpegExpression::raw("t"),
-                        FfmpegExpression::raw("0"),
-                        FfmpegExpression::call(
-                            "min",
-                            [FfmpegExpression::raw("3"), FfmpegExpression::raw("5")],
-                        ),
-                    ],
-                ),
-            )
-            .output("caption")]));
-        graph.push_chain(FfmpegFilterChain::new([FfmpegFilter::new("anullsrc")
-            .named("r", "48000")
-            .named("cl", "stereo")
-            .output("audio")]));
-
-        assert_eq!(
-            graph.render(),
-            r"[0:v]drawtext=textfile='font root/demo\\'s\:font.txt':enable='between(t\,0\,min(3\,5))'[caption];anullsrc=r=48000:cl=stereo[audio]"
-        );
-    }
-
-    #[test]
-    fn ffmpeg_filter_builder_escapes_apostrophes_through_the_filter_parser() {
-        let filter = FfmpegFilterGraph::chain([
-            FfmpegFilter::new("drawtext")
-                .named("text", FfmpegValue::text("What's next?"))
-                .named(
-                    "enable",
-                    FfmpegExpression::call(
-                        "between",
-                        [
-                            FfmpegExpression::raw("t"),
-                            FfmpegExpression::raw("0"),
-                            FfmpegExpression::raw("1"),
-                        ],
-                    ),
-                ),
-            FfmpegFilter::new("null"),
-        ])
-        .render();
-
-        assert!(filter.contains(r"text='What\\'s next?'"));
-        assert!(filter.contains(r"enable='between(t\,0\,1)',null"));
-    }
-
-    #[test]
-    fn typing_text_uses_a_safe_apostrophe_glyph() {
-        assert_eq!(safe_drawtext_text("What's next?"), "What\u{2019}s next?");
-    }
-
-    #[test]
-    fn duration_is_clamped_and_formatted_for_ffmpeg() {
-        assert_eq!(format_duration(2.5), "2.500");
-        assert_eq!(format_duration(0.0), "0.100");
-        assert_eq!(format_seconds(0.0), "0.000");
-    }
-
-    #[test]
-    fn video_export_settings_default_to_including_title_card() {
-        let settings: SketchVideoExportSettings = serde_json::from_str("{}").unwrap();
-        assert!(settings.include_title_card);
-
-        let settings: SketchVideoExportSettings =
-            serde_json::from_str(r#"{"includeTitleCard":false}"#).unwrap();
-        assert!(!settings.normalized().include_title_card);
-    }
-
-    #[test]
-    fn background_music_filter_loops_ducks_and_fades_music() {
-        let settings = SketchVideoExportSettings {
-            background_music_volume_db: -18.0,
-            background_music_duck_narration: true,
-            background_music_fade_seconds: 0.75,
-            ..SketchVideoExportSettings::default()
-        }
-        .normalized();
-        let filter = background_music_filter("12.000".to_string(), 0.75, 11.25, &settings);
-
-        assert!(filter.contains("atrim=0:12.000"));
-        assert!(filter.contains("volume=-18dB"));
-        assert!(filter.contains("afade=t=in:st=0:d=0.750"));
-        assert!(filter.contains("afade=t=out:st=11.250:d=0.750"));
-        assert!(filter.contains("sidechaincompress"));
-        assert!(filter.contains("amix=inputs=2:duration=first"));
-    }
-
-    #[test]
-    fn background_music_preview_duration_is_at_least_ten_seconds() {
-        assert_eq!(background_music_preview_duration(Some(3.5), None), 10.0);
-        assert_eq!(background_music_preview_duration(None, Some(8.0)), 10.0);
-        assert_eq!(
-            background_music_preview_duration(Some(12.25), Some(4.0)),
-            12.25
-        );
-        assert_eq!(background_music_preview_duration(Some(90.0), None), 20.0);
-    }
-
-    #[test]
-    fn background_music_preview_uses_the_selected_cached_voice_sample() {
-        let directory = tempfile::tempdir().unwrap();
-        let voice_name = "en-US-Harper:MAI-Voice-2";
-        let output_format = "riff-24khz-16bit-mono-pcm";
-        let saved = narration_preview::save_voice_preview(
-            directory.path(),
-            voice_name,
-            output_format,
-            &[1, 2, 3],
-        )
-        .unwrap();
-        let settings = BackgroundMusicPreviewSettings {
-            background_music_path: "background-music/demo.wav".to_string(),
-            narration_voice_name: voice_name.to_string(),
-            narration_voice_output_format: output_format.to_string(),
-            background_music_volume_db: -24.0,
-            background_music_duck_narration: true,
-            background_music_fade_seconds: 0.5,
-        };
-
-        let resolved = resolve_preview_narration_path(directory.path(), &settings).unwrap();
-
-        assert_eq!(resolved.to_string_lossy(), saved);
-    }
-
-    #[test]
-    fn background_music_preview_filter_pads_short_narration() {
-        let settings = SketchVideoExportSettings {
-            background_music_duck_narration: true,
-            ..SketchVideoExportSettings::default()
-        }
-        .normalized();
-        let filter = background_music_preview_filter("10.000".to_string(), 1.0, 9.0, &settings);
-
-        assert!(filter.contains("[0:a]apad,atrim=0:10.000"));
-        assert!(filter.contains("[previewNarration]"));
-        assert!(filter.contains("[music][previewNarration]sidechaincompress"));
-        assert!(filter.contains("[previewNarration][ducked]amix=inputs=2:duration=first"));
-    }
-
-    #[test]
-    fn narration_audio_filter_uses_recorded_audio_without_loudness_treatment() {
-        let unchanged = narration_audio_filter("0.500", "3.000", "3.350");
-        assert!(!unchanged.contains("loudnorm"));
-        assert_eq!(
-            unchanged,
-            "atrim=start=0.500:duration=3.000,asetpts=PTS-STARTPTS,apad,atrim=duration=3.350,aresample=48000,aformat=channel_layouts=stereo"
-        );
-    }
-
-    #[test]
-    fn hold_video_filter_adds_dip_to_black_for_row_transitions() {
-        let settings = SketchVideoExportSettings::default();
-        let fade_out = FfmpegFilterGraph::chain(hold_video_filters(
-            vec![FfmpegFilter::new("base")],
-            0.5,
-            HoldTransition::FadeOutToBlack,
-            &settings,
-        ))
-        .render();
-        assert_eq!(fade_out, "base,fade=t=out:st=0.150:d=0.350:color=black");
-
-        let fade_in = FfmpegFilterGraph::chain(hold_video_filters(
-            vec![FfmpegFilter::new("base")],
-            0.5,
-            HoldTransition::FadeInFromBlack,
-            &settings,
-        ))
-        .render();
-        assert_eq!(fade_in, "base,fade=t=in:st=0:d=0.350:color=black");
-
-        let unchanged = FfmpegFilterGraph::chain(hold_video_filters(
-            vec![FfmpegFilter::new("base")],
-            3.0,
-            HoldTransition::None,
-            &settings,
-        ))
-        .render();
-        assert_eq!(unchanged, "base");
-    }
-
-    #[test]
-    fn motion_image_video_filter_renders_zoompan_from_keyframes() {
-        let plan = MotionPlan {
-            kind: MotionPlanKind::SubtlePush,
-            keyframes: vec![
-                MotionPlanKeyframe {
-                    time_ms: 0,
-                    scale: 1.0,
-                    x: 0.5,
-                    y: 0.5,
-                    easing: Some(MotionPlanEasing::EaseOut),
-                },
-                MotionPlanKeyframe {
-                    time_ms: 2_000,
-                    scale: 1.16,
-                    x: 0.62,
-                    y: 0.41,
-                    easing: Some(MotionPlanEasing::EaseOut),
-                },
-            ],
-            rationale: None,
-        };
-
-        let settings = SketchVideoExportSettings::default();
-        let end_crop = motion_crop_rect(&plan.keyframes[1], settings.motion_max_scale);
-        assert!((end_crop.width - 0.862069).abs() < 0.000001);
-        assert!((end_crop.x - 0.137931).abs() < 0.000001);
-        assert_eq!(end_crop.y, 0.0);
-
-        let filter = motion_image_video_filter(&plan, &[], 3.0, &settings).unwrap();
-        assert!(filter.contains("zoompan=z='1/(if(lte(on\\,60)\\,1.000000+((0.862069-1.000000)*(min(max(on-0\\,0)/60\\,1)))\\,0.862069))'"));
-        assert!(filter.contains(":x='iw*(if(lte(on\\,60)\\,"));
-        assert!(filter.contains(":y='ih*(if(lte(on\\,60)\\,"));
-        assert!(filter.contains("d=90"));
-    }
-
-    #[test]
-    fn typing_spots_render_before_zoompan_with_incremental_text() {
-        let plan = MotionPlan {
-            kind: MotionPlanKind::SubtlePush,
-            keyframes: vec![
-                MotionPlanKeyframe {
-                    time_ms: 0,
-                    scale: 1.0,
-                    x: 0.5,
-                    y: 0.5,
-                    easing: Some(MotionPlanEasing::Linear),
-                },
-                MotionPlanKeyframe {
-                    time_ms: 1_000,
-                    scale: 1.2,
-                    x: 0.6,
-                    y: 0.4,
-                    easing: Some(MotionPlanEasing::Linear),
-                },
-            ],
-            rationale: None,
-        };
-        let spots = [TypingSpot {
-            x: 0.2,
-            y: 0.3,
-            width: 0.4,
-            height: 0.1,
-            text: "Go".into(),
-            start_offset_ms: Some(500),
-            duration_ms: None,
-            characters_per_second: Some(10.0),
-            show_cursor: Some(true),
-            text_color: Some("#ffcc00".into()),
-            font_family: Some("mono".into()),
-            font_scale: Some(1.2),
-        }];
-
-        let filter =
-            motion_image_video_filter(&plan, &spots, 2.0, &SketchVideoExportSettings::default())
-                .unwrap();
-
-        assert!(filter.contains("text='G|'"));
-        assert!(filter.contains("text='Go|'"));
-        assert!(filter.contains("fontcolor=0xffcc00"));
-        match typing_spot_fontfile(Some("mono")) {
-            Some(font) => assert!(filter.contains(&format!(
-                "fontfile={}",
-                FfmpegValue::font_path(font).render()
-            ))),
-            None => assert!(!filter.contains("fontfile=")),
-        }
-        assert!(filter.contains("between(t\\,0.500\\,0.600)"));
-        assert!(filter.contains("between(t\\,0.600\\,2.000)"));
-        assert!(filter.contains("x='w*0.206250'"));
-        assert!(filter.contains("y='h*0.307407+ascent'"));
-        assert!(!filter.contains("box="));
-        assert!(!filter.contains("boxcolor="));
-        assert!(filter.find("drawtext=").unwrap() < filter.find("zoompan=").unwrap());
-
-        let completed = FfmpegFilterGraph::chain(
-            still_image_video_filters(&spots, 2.0, true, &SketchVideoExportSettings::default())
-                .unwrap(),
-        )
-        .render();
-        assert!(completed.contains("text='Go'"));
-        assert!(!completed.contains("text='G|'"));
-        assert!(!completed.contains("enable="));
-    }
-
-    #[test]
-    fn motion_image_video_filter_preserves_intermediate_keyframes() {
-        let plan = MotionPlan {
-            kind: MotionPlanKind::WideHoldThenPush,
-            keyframes: vec![
-                MotionPlanKeyframe {
-                    time_ms: 0,
-                    scale: 1.0,
-                    x: 0.5,
-                    y: 0.5,
-                    easing: Some(MotionPlanEasing::Linear),
-                },
-                MotionPlanKeyframe {
-                    time_ms: 1_000,
-                    scale: 1.0,
-                    x: 0.5,
-                    y: 0.5,
-                    easing: Some(MotionPlanEasing::Linear),
-                },
-                MotionPlanKeyframe {
-                    time_ms: 2_000,
-                    scale: 1.16,
-                    x: 0.62,
-                    y: 0.41,
-                    easing: Some(MotionPlanEasing::Linear),
-                },
-            ],
-            rationale: None,
-        };
-
-        let settings = SketchVideoExportSettings::default();
-        let filter = motion_image_video_filter(&plan, &[], 3.0, &settings).unwrap();
-        assert!(filter.contains("if(lte(on\\,30)\\,"));
-        assert!(filter.contains("if(lte(on\\,60)\\,"));
-        assert!(filter.contains("min(max(on-30\\,0)/30\\,1)"));
-    }
-
-    #[test]
-    fn motion_final_frame_filter_holds_last_camera_position() {
-        let plan = MotionPlan {
-            kind: MotionPlanKind::SubtlePush,
-            keyframes: vec![
-                MotionPlanKeyframe {
-                    time_ms: 0,
-                    scale: 1.0,
-                    x: 0.5,
-                    y: 0.5,
-                    easing: Some(MotionPlanEasing::Linear),
-                },
-                MotionPlanKeyframe {
-                    time_ms: 2_000,
-                    scale: 1.16,
-                    x: 0.62,
-                    y: 0.41,
-                    easing: Some(MotionPlanEasing::Linear),
-                },
-            ],
-            rationale: None,
-        };
-
-        let settings = SketchVideoExportSettings::default();
-        let end_crop = motion_crop_rect(&plan.keyframes[1], settings.motion_max_scale);
-        assert!((end_crop.width - 0.862069).abs() < 0.000001);
-        assert!((end_crop.x - 0.137931).abs() < 0.000001);
-        assert_eq!(end_crop.y, 0.0);
-
-        let filter = motion_final_frame_video_filter(&plan, &[], &settings).unwrap();
-        assert!(filter.contains("zoompan=z='1/0.862069'"));
-        assert!(filter.contains(":x='iw*("));
-        assert!(filter.contains(":y='ih*(0.000000)'"));
-    }
-
-    #[test]
-    fn motion_crop_rect_allows_deeper_pushes() {
-        let keyframe = MotionPlanKeyframe {
-            time_ms: 1_000,
-            scale: 1.65,
-            x: 0.5,
-            y: 0.5,
-            easing: Some(MotionPlanEasing::Linear),
-        };
-
-        let settings = SketchVideoExportSettings::default();
-        let crop = motion_crop_rect(&keyframe, settings.motion_max_scale);
-        assert!((crop.width - 0.606061).abs() < 0.000001);
-        assert!((crop.x - 0.196970).abs() < 0.000001);
-        assert!((crop.y - 0.196970).abs() < 0.000001);
-    }
-
-    #[test]
-    fn effective_source_duration_uses_longer_probe_result() {
-        assert_eq!(
-            effective_source_duration_seconds(Some(2.0), Some(2.4)),
-            Some(2.4)
-        );
-        assert_eq!(
-            effective_source_duration_seconds(Some(2.4), Some(2.0)),
-            Some(2.4)
-        );
-        assert_eq!(
-            effective_source_duration_seconds(Some(2.0), None),
-            Some(2.0)
-        );
-        assert_eq!(
-            effective_source_duration_seconds(Some(0.0), Some(f64::NAN)),
-            None
-        );
-    }
-
-    #[test]
-    fn effective_narration_timing_trims_silence_metadata() {
-        let (start, duration) = effective_narration_timing(5.0, Some(700), Some(1200));
-        assert_eq!(format_seconds(start), "0.700");
-        assert_eq!(format_duration(duration), "3.100");
-    }
-
-    #[test]
-    fn effective_narration_timing_preserves_full_audio_with_zero_silence_metadata() {
-        let (start, duration) = effective_narration_timing(5.0, Some(0), Some(0));
-        assert_eq!(format_seconds(start), "0.000");
-        assert_eq!(format_duration(duration), "5.000");
-    }
-
-    #[test]
-    fn effective_narration_timing_keeps_a_minimum_span_when_silence_overlaps() {
-        let (start, duration) = effective_narration_timing(1.0, Some(900), Some(900));
-        assert_eq!(format_seconds(start), "0.900");
-        assert_eq!(format_duration(duration), "0.100");
-    }
-
-    #[test]
-    fn description_text_extracts_rich_text_without_node_type_names() {
-        let value = serde_json::json!([
-            {
-                "type": "paragraph",
-                "children": [
-                    { "text": "A crisp product demo" },
-                    { "text": " from sketch rows." }
-                ]
-            }
-        ]);
-
-        assert_eq!(
-            description_text(&value),
-            "A crisp product demo from sketch rows."
-        );
-    }
-
-    #[test]
-    fn title_card_filter_includes_escaped_title_and_description() {
-        let mut sketch = Sketch::new("Demo: Export, Now 100%", chrono::Utc::now());
-        sketch.description = serde_json::json!([{ "type": "paragraph", "children": [{ "text": "Direction's script, A [B]" }] }]);
-
-        let settings = SketchVideoExportSettings::default();
-        let filter = title_card_filter(&sketch, &settings);
-        assert!(filter.contains("drawtext=text='Demo\\: Export\\, Now 100\\%'"));
-        assert!(filter.contains("text='Direction’s script\\, A \\[B\\]'"));
-        assert!(!filter.contains("paragraph"));
-    }
-
-    #[test]
-    fn ffmpeg_filter_builder_escapes_filter_safe_paths() {
-        let path = ["font root", "demo's:font.ttf"].iter().collect::<PathBuf>();
-        assert_eq!(
-            FfmpegValue::file_path(&path).render(),
-            r"'font root/demo\\'s\:font.ttf'"
-        );
-    }
-
-    #[cfg(target_os = "windows")]
-    #[test]
-    fn ffmpeg_filter_builder_keeps_windows_drive_prefix() {
-        assert_eq!(
-            FfmpegValue::file_path(Path::new(r"C:\cutready\rko\title-card.txt")).render(),
-            r"'C\:/cutready/rko/title-card.txt'"
-        );
-    }
-
-    #[cfg(target_os = "windows")]
-    #[test]
-    fn ffmpeg_filter_builder_strips_windows_font_drive_prefix() {
-        assert_eq!(
-            FfmpegValue::font_path(Path::new(r"C:\Windows\Fonts\segoeui.ttf")).render(),
-            r"'/Windows/Fonts/segoeui.ttf'"
-        );
-    }
-
-    #[test]
-    fn export_sketch_video_combines_typing_camera_motion_and_audio_when_ffmpeg_is_available() {
-        if ensure_ffmpeg_available().is_err() {
-            eprintln!("Skipping sketch video export smoke test because FFmpeg is unavailable");
-            return;
-        }
-
-        let temp_dir = TempDir::new().unwrap();
-        let root = temp_dir.path();
-        fs::create_dir_all(root.join(".cutready/screenshots")).unwrap();
-        fs::create_dir_all(root.join(".cutready/narration")).unwrap();
-
-        let screenshot_path = root.join(".cutready/screenshots/row-1.png");
-        RgbImage::from_pixel(320, 180, Rgb([120, 90, 200]))
-            .save(&screenshot_path)
-            .unwrap();
-
-        let narration_path = root.join(".cutready/narration/row-1.wav");
-        run_ffmpeg(vec![
-            "-y".to_string(),
-            "-hide_banner".to_string(),
-            "-loglevel".to_string(),
-            "error".to_string(),
-            "-f".to_string(),
-            "lavfi".to_string(),
-            "-i".to_string(),
-            "sine=frequency=440:duration=0.25".to_string(),
-            "-c:a".to_string(),
-            "pcm_s16le".to_string(),
-            narration_path.to_string_lossy().to_string(),
-        ])
-        .unwrap();
-
-        let mut sketch = Sketch::new("Tiny Export", chrono::Utc::now());
-        let mut row = PlanningRow::new();
-        row.screenshot = Some(".cutready/screenshots/row-1.png".to_string());
-        row.typing_spots = vec![TypingSpot {
-            x: 0.2,
-            y: 0.25,
-            width: 0.5,
-            height: 0.12,
-            text: "What's next?".to_string(),
-            start_offset_ms: Some(0),
-            duration_ms: None,
-            characters_per_second: Some(24.0),
-            show_cursor: Some(true),
-            text_color: Some("#ffffff".to_string()),
-            font_family: Some("sans".to_string()),
-            font_scale: Some(1.0),
-        }];
-        row.motion_plan = Some(MotionPlan {
-            kind: MotionPlanKind::SubtlePush,
-            keyframes: vec![
-                MotionPlanKeyframe {
-                    time_ms: 0,
-                    scale: 1.0,
-                    x: 0.5,
-                    y: 0.5,
-                    easing: Some(MotionPlanEasing::Linear),
-                },
-                MotionPlanKeyframe {
-                    time_ms: 250,
-                    scale: 1.1,
-                    x: 0.55,
-                    y: 0.45,
-                    easing: Some(MotionPlanEasing::Linear),
-                },
-            ],
-            rationale: None,
-        });
-        row.narration = Some(NarrationAsset {
-            path: ".cutready/narration/row-1.wav".to_string(),
-            source_text: "Hello".to_string(),
-            source_text_hash: "hash".to_string(),
-            mime_type: "audio/wav".to_string(),
-            duration_ms: Some(250),
-            leading_silence_ms: None,
-            trailing_silence_ms: None,
-            silence_threshold_db: None,
-            byte_size: narration_path.metadata().unwrap().len(),
-            recorded_at: Utc::now(),
-        });
-        sketch.rows = vec![row];
-        project::write_sketch(&sketch, &root.join("tiny.sk"), root).unwrap();
-
-        let export = export_sketch_video(root, "tiny.sk", None).unwrap();
-        assert_eq!(export.row_count, 1);
-        let output = PathBuf::from(&export.path);
-        assert!(output.starts_with(root.join("exports")));
-        assert!(output
-            .file_name()
-            .and_then(OsStr::to_str)
-            .is_some_and(|name| name.starts_with("tiny-export-") && name.ends_with(".mp4")));
-        assert!(output.is_file());
-        assert!(output.metadata().unwrap().len() > 0);
-    }
-
-    #[test]
-    fn export_sketch_video_uses_requested_absolute_output_when_ffmpeg_is_available() {
-        if ensure_ffmpeg_available().is_err() {
-            eprintln!("Skipping sketch video export smoke test because FFmpeg is unavailable");
-            return;
-        }
-
-        let temp_dir = TempDir::new().unwrap();
-        let root = temp_dir.path();
-        fs::create_dir_all(root.join(".cutready/screenshots")).unwrap();
-        fs::create_dir_all(root.join(".cutready/narration")).unwrap();
-
-        let screenshot_path = root.join(".cutready/screenshots/row-1.png");
-        RgbImage::from_pixel(320, 180, Rgb([90, 120, 200]))
-            .save(&screenshot_path)
-            .unwrap();
-
-        let narration_path = root.join(".cutready/narration/row-1.wav");
-        run_ffmpeg(vec![
-            "-y".to_string(),
-            "-hide_banner".to_string(),
-            "-loglevel".to_string(),
-            "error".to_string(),
-            "-f".to_string(),
-            "lavfi".to_string(),
-            "-i".to_string(),
-            "sine=frequency=330:duration=0.25".to_string(),
-            "-c:a".to_string(),
-            "pcm_s16le".to_string(),
-            narration_path.to_string_lossy().to_string(),
-        ])
-        .unwrap();
-
-        let mut sketch = Sketch::new("Custom Export", chrono::Utc::now());
-        let mut row = PlanningRow::new();
-        row.screenshot = Some(".cutready/screenshots/row-1.png".to_string());
-        row.narration = Some(NarrationAsset {
-            path: ".cutready/narration/row-1.wav".to_string(),
-            source_text: "Hello".to_string(),
-            source_text_hash: "hash".to_string(),
-            mime_type: "audio/wav".to_string(),
-            duration_ms: Some(250),
-            leading_silence_ms: None,
-            trailing_silence_ms: None,
-            silence_threshold_db: None,
-            byte_size: narration_path.metadata().unwrap().len(),
-            recorded_at: Utc::now(),
-        });
-        sketch.rows = vec![row];
-        project::write_sketch(&sketch, &root.join("custom.sk"), root).unwrap();
-
-        let output_path = temp_dir.path().join("outside-project-custom-name.mp4");
-        let export = export_sketch_video(root, "custom.sk", Some(output_path.as_path())).unwrap();
-        assert_eq!(export.path, output_path.to_string_lossy().to_string());
-        assert!(output_path.is_file());
-    }
-
-    #[test]
-    fn export_sketch_video_rejects_relative_output_path() {
-        let temp_dir = TempDir::new().unwrap();
-        let root = temp_dir.path();
-        let mut sketch = Sketch::new("Unsafe Export", chrono::Utc::now());
-        let mut row = PlanningRow::new();
-        row.screenshot = Some("missing.png".to_string());
-        row.narration = Some(NarrationAsset {
-            path: "missing.wav".to_string(),
-            source_text: "Hello".to_string(),
-            source_text_hash: "hash".to_string(),
-            mime_type: "audio/wav".to_string(),
-            duration_ms: Some(250),
-            leading_silence_ms: None,
-            trailing_silence_ms: None,
-            silence_threshold_db: None,
-            byte_size: 0,
-            recorded_at: Utc::now(),
-        });
-        sketch.rows = vec![row];
-        project::write_sketch(&sketch, &root.join("unsafe.sk"), root).unwrap();
-
-        let error =
-            export_sketch_video(root, "unsafe.sk", Some(Path::new("escape.mp4"))).unwrap_err();
-        assert!(error.to_string().contains("must be absolute"));
-    }
-}
+#[path = "export_tests.rs"]
+mod tests;

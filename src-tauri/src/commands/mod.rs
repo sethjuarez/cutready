@@ -10,6 +10,8 @@ pub mod draftline_history;
 pub mod draftline_merge;
 pub mod draftline_rebase;
 pub mod draftline_shelf;
+// CmdError is serialized straight across IPC, so its size never sits on a hot path.
+#[allow(clippy::result_large_err)]
 pub mod export;
 pub mod feedback;
 pub mod github;
