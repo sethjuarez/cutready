@@ -14,8 +14,7 @@ import {
   preflightDraftlineIncoming,
   preflightDraftlineMergeBase,
   preflightDraftlineMergeIncoming,
-  mergeDraftlineFromBase,
-  mergeDraftlineIncoming,
+  mergeDraftlineIncomingWithToken,
   publishDraftlineChanges,
   sendForReview as sendDraftlineForReview,
 } from "../services/draftlineVersioning";
@@ -23,6 +22,7 @@ import { baseRenamedBranches, mergeNeedsDeveloperMessage } from "../services/dra
 import { useToastStore } from "./toastStore";
 import { useAppStore } from "./appStore";
 import { useVersioningStore } from "./versioningStore";
+import { activeTimelineLabel, askMergeName } from "../services/mergeName";
 import {
   SYNC_IN_PROGRESS_MESSAGE,
   buildShareUrl,
@@ -33,6 +33,7 @@ import {
   errorMessage,
   isMergeNeedsDeveloperError,
   largeFilesSyncError,
+  mergeSyncErrorMessage,
   remoteSyncErrorMessage,
 } from "./workspaceHelpers";
 import type {
@@ -65,7 +66,7 @@ export interface SyncState {
   /** Share/PR URL for the latest successful share operation. */
   shareUrl: string | null;
   /** Hybrid projects: pending "Send for review" prompt (pull request title). */
-  sendForReviewPrompt: { defaultTitle: string } | null;
+  sendForReviewPrompt: { defaultTitle: string; defaultBody?: string } | null;
 }
 
 export interface SyncActions {
@@ -214,6 +215,7 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
       set({
         sendForReviewPrompt: {
           defaultTitle: versioning().versions[0]?.message?.trim() || `Update ${project.name}`,
+          defaultBody: versioning().versions[0]?.comment ?? "",
         },
       });
       return;
@@ -351,7 +353,9 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
         if (state === "needsMerge" && preflight.dirtyFiles.length === 0) {
           const mergeReport = await preflightDraftlineMergeIncoming(currentRemote.name);
           if (mergeReport.canMergeCleanly && mergeReport.token) {
-            await mergeDraftlineIncoming(currentRemote.name, "Merge incoming saves");
+            const message = await askMergeName(activeTimelineLabel(versioning().timelines) ?? currentRemote.name, mergeReport.incoming);
+            if (!message) return;
+            await mergeDraftlineIncomingWithToken(mergeReport.token, message, currentRemote.name);
             await app().loadSketches();
             await app().loadStoryboards();
             await app().loadNotes();
@@ -373,6 +377,7 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
               mergeConflicts: mergeReport.conflicts,
               draftlineMergeToken: mergeReport.token,
               draftlineMergeRemote: currentRemote.name,
+              draftlineMergeIncoming: mergeReport.incoming,
             });
             set({
               syncError: null,
@@ -407,7 +412,7 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
       await versioning().checkDirty();
       useToastStore.getState().showUpdate("Incoming saves applied.", "success");
     } catch (err) {
-      set({ syncError: remoteSyncErrorMessage(err) });
+      set({ syncError: mergeSyncErrorMessage(err) });
     } finally {
       set({ isSyncing: false });
     }
@@ -430,8 +435,11 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
       if (report.dirtyFiles.length > 0) {
         updateError = `Save or discard local changes before getting updates from ${base}.`;
       } else if (report.canMergeCleanly && report.token) {
-        await mergeDraftlineFromBase(currentRemote.name, `Bring in latest ${base}`);
-        useToastStore.getState().showUpdate(`Updates from ${base} brought in.`, "success");
+        const message = await askMergeName(base, report.incoming);
+        if (message) {
+          await mergeDraftlineIncomingWithToken(report.token, message, currentRemote.name);
+          useToastStore.getState().showUpdate(`Updates from ${base} brought in.`, "success");
+        }
       } else if (report.conflicts.length > 0 && report.token) {
         useVersioningStore.setState({
           isMerging: true,
@@ -440,6 +448,7 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
           mergeConflicts: report.conflicts,
           draftlineMergeToken: report.token,
           draftlineMergeRemote: currentRemote.name,
+          draftlineMergeIncoming: report.incoming,
         });
         useToastStore.getState().showUpdate(`Updates from ${base} need conflict resolution.`, "info");
       } else if (report.syncStatus.behind === 0) {
@@ -450,7 +459,7 @@ export const useSyncStore = create<SyncStoreState>((set, get) => ({
     } catch (err) {
       updateError = isMergeNeedsDeveloperError(err)
         ? mergeNeedsDeveloperMessage(base)
-        : remoteSyncErrorMessage(err);
+        : mergeSyncErrorMessage(err);
     } finally {
       // Refresh even on failure: the fetch may have moved the base.
       try {

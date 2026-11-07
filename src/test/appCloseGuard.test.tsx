@@ -32,6 +32,7 @@ vi.mock("@tauri-apps/api/window", () => ({
 
 import { AppCloseGuard } from "../components/AppCloseGuard";
 import { useAppStore } from "../stores/appStore";
+import { useChangeSummaryStore } from "../stores/changeSummaryStore";
 import { useVersioningStore } from "../stores/versioningStore";
 
 const project = {
@@ -52,7 +53,6 @@ describe("AppCloseGuard", () => {
       useVersioningStore.setState({
         isDirty: false,
         isMerging: false,
-        snapshotPromptOpen: false,
         mergeConflicts: [],
         draftlineMergeToken: null,
         draftlineMergeRemote: null,
@@ -74,13 +74,14 @@ describe("AppCloseGuard", () => {
     });
 
     expect(event!.preventDefault).toHaveBeenCalled();
-    expect(await screen.findByText("Quit with unsaved snapshot?")).toBeInTheDocument();
+    expect(await screen.findByText("Quit without saving a version?")).toBeInTheDocument();
 
     act(() => {
-      fireEvent.click(screen.getByRole("button", { name: "Save snapshot first" }));
+      fireEvent.click(screen.getByRole("button", { name: "Save version first" }));
     });
 
-    expect(useVersioningStore.getState().snapshotPromptOpen).toBe(true);
+    expect(useChangeSummaryStore.getState().popoverOpen).toBe(true);
+    expect(useChangeSummaryStore.getState().nameFocusRequest).toBeGreaterThan(0);
     expect(windowMock.close).not.toHaveBeenCalled();
   });
 
@@ -130,6 +131,6 @@ describe("AppCloseGuard", () => {
 
     expect(useVersioningStore.getState().isMerging).toBe(false);
     expect(windowMock.close).not.toHaveBeenCalled();
-    expect(await screen.findByText("Quit with unsaved snapshot?")).toBeInTheDocument();
+    expect(await screen.findByText("Quit without saving a version?")).toBeInTheDocument();
   });
 });

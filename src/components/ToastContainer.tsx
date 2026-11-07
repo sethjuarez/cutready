@@ -49,7 +49,13 @@ export function ToastContainer() {
               <button
                 type="button"
                 onClick={() => {
-                  void shellOpen(t.link!.url).catch((err) => console.warn("Failed to open link:", err));
+                  const link = t.link!;
+                  if (link.onSelect) {
+                    dismiss(t.id);
+                    link.onSelect();
+                    return;
+                  }
+                  void shellOpen(link.url).catch((err) => console.warn("Failed to open link:", err));
                 }}
                 title={t.link.url}
                 className="show-underlines-target ml-1 font-medium text-[rgb(var(--color-accent))] hover:underline"

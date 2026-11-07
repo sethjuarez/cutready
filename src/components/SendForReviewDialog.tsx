@@ -18,7 +18,7 @@ export function SendForReviewDialog() {
   useEffect(() => {
     if (prompt) {
       setTitle(prompt.defaultTitle);
-      setBody("");
+      setBody(prompt.defaultBody ?? "");
     }
   }, [prompt]);
 

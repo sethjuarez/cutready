@@ -140,7 +140,7 @@
       "name": "imports an image into Visuals",
       "steps": [
         { "press": "Control+Shift+P" },
-        { "fill": { "role": "combobox", "name": "Search commands" }, "value": "Go to Visuals" },
+        { "fill": { "role": "combobox", "name": "Search commands" }, "value": "Go to Media" },
         { "press": "Enter", "target": { "role": "combobox", "name": "Search commands" } },
         { "dialog": "open", "respond": "${CUTREADY_SCRATCH}/logo.png", "expectOptions": { "multiple": false, "filters": [{ "name": "Images" }] } },
         { "click": { "role": "button", "name": "Import image", "exact": true } },

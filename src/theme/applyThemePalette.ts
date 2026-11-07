@@ -4,7 +4,7 @@ import type { ContentTypeTokenKey, ThemeColorTokens, ThemePalette } from "./appT
 
 export const THEME_BOOTSTRAP_CACHE_KEY = "cutready-theme-bootstrap";
 /** Bump when palette values or token names change so index.html ignores stale first-paint caches. */
-export const THEME_BOOTSTRAP_CACHE_VERSION = 3;
+export const THEME_BOOTSTRAP_CACHE_VERSION = 4;
 
 export const THEME_COLOR_TOKEN_MAP: Record<keyof ThemeColorTokens, string> = {
   surface: "--color-surface",

@@ -1,6 +1,6 @@
 import type { AppView } from "../stores/appStore";
 
-export type NavId = "project" | "media" | "changes" | "chat";
+export type NavId = "project" | "media" | "chat";
 
 /** Views shown by the Media library (narrations is the legacy name for its audio). */
 export const isMediaView = (view: AppView) => view === "assets" || view === "narrations";
@@ -12,7 +12,6 @@ export const hidesEditor = (view: AppView) =>
 /** The nav row that owns a view. Views without their own row show Documents. */
 export function panelOwner(view: AppView): Exclude<NavId, "chat"> | null {
   if (isMediaView(view)) return "media";
-  if (view === "changes") return view;
   if (view === "chat" || view === "home" || view === "settings") return null;
   return "project";
 }

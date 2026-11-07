@@ -43,19 +43,10 @@ const CUTREADY_INCLUDED_PATHS: &[&str] = &[
 ];
 const CUTREADY_LARGE_FILE_THRESHOLD_BYTES: u64 = 50 * 1024 * 1024;
 
-/// Branch namespace CutReady owns inside a developer's code repository. Only
-/// applied to hybrid projects so standalone projects keep their existing variations.
-pub const CUTREADY_VARIATION_NAMESPACE: &str = "cutready/";
-
-/// Prefix a user-supplied variation name with CutReady's namespace when the
-/// project is hybrid and the name isn't already namespaced.
-pub fn namespaced_variation_name(hybrid: bool, name: &str) -> String {
-    let trimmed = name.trim();
-    if !hybrid || trimmed.starts_with(CUTREADY_VARIATION_NAMESPACE) {
-        return name.to_string();
-    }
-    format!("{CUTREADY_VARIATION_NAMESPACE}{trimmed}")
-}
+pub mod naming;
+mod restore;
+mod sync;
+pub use naming::{namespaced_variation_name, CUTREADY_VARIATION_NAMESPACE};
 
 /// CutReady-facing facade over a Draftline workspace.
 pub struct CutReadyDraftlineAdapter {
@@ -340,14 +331,6 @@ impl CutReadyDraftlineAdapter {
         self.workspace.switch_variation(variation, policy)
     }
 
-    pub fn restore_version_as_new_save(
-        &self,
-        version: &VersionId,
-        label: &str,
-    ) -> DraftlineResult<Version> {
-        self.workspace.restore_version_as_new_save(version, label)
-    }
-
     pub fn diff_versions(&self, from: &VersionId, to: &VersionId) -> DraftlineResult<VersionDiff> {
         self.workspace.diff_versions(from, to)
     }
@@ -370,10 +353,6 @@ impl CutReadyDraftlineAdapter {
         options: &mut RemoteOptions<'_>,
     ) -> DraftlineResult<()> {
         self.workspace.fetch_remote_with_options(remote, options)
-    }
-
-    pub fn sync_status(&self, remote: &str) -> DraftlineResult<SyncStatus> {
-        self.workspace.sync_status(remote)
     }
 
     /// Compare the current branch with the remote base branch (e.g. `main`)
@@ -782,7 +761,7 @@ mod tests {
     use super::*;
     use cutready_core::testing::MemoryLock;
 
-    fn write(path: impl AsRef<Path>, contents: &str) {
+    pub(crate) fn write(path: impl AsRef<Path>, contents: &str) {
         if let Some(parent) = path.as_ref().parent() {
             std::fs::create_dir_all(parent).unwrap();
         }
@@ -823,7 +802,7 @@ mod tests {
         run_git(root, &["init", "--initial-branch=main"]);
     }
 
-    fn configure_identity(root: &Path, name: &str, email: &str) {
+    pub(crate) fn configure_identity(root: &Path, name: &str, email: &str) {
         run_git(root, &["config", "user.name", name]);
         run_git(root, &["config", "user.email", email]);
     }
@@ -833,7 +812,7 @@ mod tests {
         run_git(root, &["commit", "-m", message]);
     }
 
-    fn init_bare_main_remote(path: &Path) {
+    pub(crate) fn init_bare_main_remote(path: &Path) {
         let parent = path.parent().unwrap_or_else(|| Path::new("."));
         std::fs::create_dir_all(parent).unwrap();
         let name = path.file_name().unwrap().to_string_lossy().to_string();
@@ -1222,60 +1201,6 @@ mod tests {
             .collect();
 
         assert!(!names.iter().any(|name| name == "delete-me"));
-    }
-
-    #[test]
-    fn restore_version_as_new_save_requires_clean_workspace() {
-        let temp = tempfile::tempdir().unwrap();
-        let root = temp.path();
-        write(root.join("intro.sk"), r#"{"title":"One"}"#);
-
-        let adapter = CutReadyDraftlineAdapter::open_project(root).unwrap();
-        let first = adapter.save_version("First").unwrap();
-        write(root.join("intro.sk"), r#"{"title":"Two"}"#);
-        adapter.save_version("Second").unwrap();
-
-        write(root.join("planning.md"), "# unsaved\n");
-        let error = adapter
-            .restore_version_as_new_save(first.id(), "Restore first")
-            .unwrap_err();
-        assert!(matches!(
-            error,
-            draftline::DraftlineError::PreflightFailed(_)
-        ));
-        assert_eq!(read(root.join("planning.md")), "# unsaved\n");
-    }
-
-    #[test]
-    fn restore_version_as_new_save_restores_tracked_content_without_runtime_state() {
-        let temp = tempfile::tempdir().unwrap();
-        let root = temp.path();
-        write(root.join("intro.sk"), r#"{"title":"One"}"#);
-        write(root.join(".cutready/ui-state.json"), r#"{"panel":"one"}"#);
-
-        let adapter = CutReadyDraftlineAdapter::open_project(root).unwrap();
-        let first = adapter.save_version("First").unwrap();
-        write(root.join("intro.sk"), r#"{"title":"Two"}"#);
-        write(root.join(".cutready/ui-state.json"), r#"{"panel":"two"}"#);
-        adapter.save_version("Second").unwrap();
-
-        let restored = adapter
-            .restore_version_as_new_save(first.id(), "Restore first")
-            .unwrap();
-
-        assert_eq!(read(root.join("intro.sk")), r#"{"title":"One"}"#);
-        assert_eq!(
-            read(root.join(".cutready/ui-state.json")),
-            r#"{"panel":"two"}"#
-        );
-        let restored_preview = adapter
-            .preview_version_file(restored.id(), "intro.sk")
-            .unwrap()
-            .unwrap();
-        assert!(restored_preview
-            .content
-            .as_deref()
-            .is_some_and(|content| content.contains("\"One\"")));
     }
 
     #[test]

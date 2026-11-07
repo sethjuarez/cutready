@@ -48,9 +48,6 @@ vi.mock("../components/MergeConflictPanel", () => ({
 vi.mock("../components/ChatPanel", () => ({
   ChatPanel: () => <div />,
 }));
-vi.mock("../components/ChangesPanel", () => ({
-  ChangesPanel: () => <div />,
-}));
 vi.mock("../components/FeedbackDialog", () => ({
   FeedbackDialog: () => null,
 }));

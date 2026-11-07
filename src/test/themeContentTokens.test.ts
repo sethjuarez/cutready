@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { THEME_PALETTES, deriveContentTokens } from "../theme/appThemePalettes";
+import { readFileSync } from "node:fs";
+import { MICA_TINTS, sidebarBackdrops } from "../theme/paletteColor";
 
 type Rgb = [number, number, number];
 
@@ -50,6 +52,10 @@ describe("derived content type tokens", () => {
 
       for (const token of entries) {
         expect(contrastRatio(token, colors.surface)).toBeGreaterThanOrEqual(4.5);
+        // Tinted sidebar icons stay visible on the mica sidebar, plain or selected (WCAG 1.4.11).
+        for (const backdrop of sidebarBackdrops(colors)) {
+          expect(contrastRatio(token, backdrop.join(" "))).toBeGreaterThanOrEqual(3);
+        }
       }
 
       const hues = entries.map(oklchHue);
@@ -66,11 +72,27 @@ describe("derived content type tokens", () => {
 
     expect(deriveContentTokens(palette.dark).sketch).toBe("170 160 255");
     // Original light values were 111 99 232 / 15 118 110 / 194 105 17; chat is the fourth derived document lane.
+    // Storyboard and note are deepened slightly so sidebar icons keep 3:1 on the mica selected row.
     expect(deriveContentTokens(palette.light)).toEqual({
       sketch: "105 94 216",
-      storyboard: "7 129 111",
-      note: "181 87 0",
+      storyboard: "10 122 105",
+      note: "170 83 3",
       chat: "182 60 143",
     });
+  });
+
+  const css = readFileSync("src/index.css", "utf8");
+  const block = (selector: string) => css.slice(css.indexOf(`${selector} {`), css.indexOf("}", css.indexOf(`${selector} {`)));
+
+  it.each([[":root", "light"], [".dark", "dark"]] as const)("keeps the %s first-paint fallbacks in sync with the CutReady palette", (selector, mode) => {
+    const rules = block(selector);
+    const palette = THEME_PALETTES.find((entry) => entry.id === "cutready")!;
+    const derived = deriveContentTokens(palette[mode]);
+    for (const [key, token] of Object.entries(derived)) {
+      expect(rules).toContain(`--color-content-${key}: ${token};`);
+    }
+    const micaDecl = rules.slice(rules.indexOf("--mica:"));
+    const mica = [...micaDecl.slice(0, micaDecl.indexOf(";")).matchAll(/rgb\((\d+) (\d+) (\d+) \/ ([\d.]+)\)/g)];
+    expect(mica.map((m) => [[+m[1], +m[2], +m[3]], +m[4]])).toEqual(MICA_TINTS[mode]);
   });
 });

@@ -24,6 +24,8 @@ import {
   refreshOpenDocuments,
   saveDocument,
   settleBeforeRename,
+  settleDocumentWrites,
+  DocumentsUnsavedError,
 } from "../services/documentSaves";
 import { useAppStore } from "../stores/appStore";
 import { documentEntry, resetDocumentVersions } from "../stores/documentVersionStore";
@@ -672,6 +674,22 @@ describe("conflict redirects with the document open in both panes", () => {
     await settle();
     expect(await saveTo("split closed")).toBe("demo.sk split closed");
     expect(ipc.save).toHaveBeenLastCalledWith("update_sketch_title", expect.objectContaining({ relativePath: "demo.sk", expectedVersion: "h9" }));
+  });
+});
+
+describe("settleDocumentWrites", () => {
+  it("fails while a document's latest save failed, and passes once a later save lands", async () => {
+    await openSketch(sketch("v0"), "h0");
+    ipc.save.mockRejectedValueOnce({ code: "io" });
+    await expect(saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "lost" })).rejects.toMatchObject({ code: "io" });
+
+    const error = await settleDocumentWrites().catch((e) => e);
+    expect(error).toBeInstanceOf(DocumentsUnsavedError);
+    expect(error.paths).toEqual(["demo.sk"]);
+
+    ipc.save.mockResolvedValueOnce(versioned(sketch("kept"), "h1"));
+    await saveDocument("update_sketch_title", { relativePath: "demo.sk", title: "kept" });
+    await expect(settleDocumentWrites()).resolves.toBeUndefined();
   });
 });
 

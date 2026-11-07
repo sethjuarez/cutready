@@ -475,39 +475,30 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "resolve_deep_link":
       return null;
     case "save":
-      return {
-        id: "fff456fff456fff456fff456fff456fff456fff4",
-        label: (args as { request?: { label?: string } })?.request?.label ?? "Saved draft",
-        author: { name: "You", email: "dev@example.com" },
-        saved_by: { name: "You", email: "dev@example.com" },
-        time_seconds: Math.floor(Date.now() / 1000),
-      };
+      return mockSavedVersion("fff456fff456fff456fff456fff456fff456fff4", (args as { request?: { label?: string } })?.request?.label ?? "Saved draft");
     case "selected_discard":
       return { files: [], diff: null };
     case "selected_shelve":
       return {
         id: (args as { request?: { name?: string } })?.request?.name ?? "cutready-stash",
-        version: {
-          id: "shelf456shelf456shelf456shelf456shelf456",
-          label: "Shelved changes",
-          author: { name: "You", email: "dev@example.com" },
-          saved_by: { name: "You", email: "dev@example.com" },
-          time_seconds: Math.floor(Date.now() / 1000),
-        },
+        version: mockSavedVersion("shelf456shelf456shelf456shelf456shelf456", "Shelved changes"),
       };
     case "apply_shelf":
       return {
         id: (args as { request?: { shelf_id?: string } })?.request?.shelf_id ?? "cutready-stash",
-        version: {
-          id: "shelf456shelf456shelf456shelf456shelf456",
-          label: "Shelved changes",
-          author: { name: "You", email: "dev@example.com" },
-          saved_by: { name: "You", email: "dev@example.com" },
-          time_seconds: Math.floor(Date.now() / 1000),
-        },
+        version: mockSavedVersion("shelf456shelf456shelf456shelf456shelf456", "Shelved changes"),
       };
     case "delete_shelf":
+    case "clone_from_url":
       return null;
+    case "preflight_apply_shelf":
+      return { overlapping_files: [], dirty_files: [] };
+    case "restore_version_as_new_save":
+    case "restore_version_paths_as_new_save":
+      return {
+        version: mockSavedVersion("restore789restore789restore789restore789", (args as { request?: { label?: string } })?.request?.label ?? "Restore version"),
+        postconditions: [],
+      };
     case "preflight_create_variation_from_version": {
       const request = (args as { request?: { version_id?: string; name?: string; remote?: string | null } })?.request;
       const name = request?.name ?? "variation";
@@ -740,13 +731,11 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     case "get_memory_context":
       return "";
     case "archive_chat_session":
-      return null;
     case "update_chat_summary":
       return null;
     case "list_memories":
       return [];
     case "delete_memory":
-      return null;
     case "update_memory":
       return null;
     case "clear_memories":
@@ -1143,6 +1132,7 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         url: (args as { request?: { url?: string } })?.request?.url ?? "https://github.com/example/cutready-demo.git",
       };
     case "list_remotes":
+    case "check_large_files":
       return [];
     case "list_remote_variations":
       return [
@@ -1185,8 +1175,9 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
     }
     case "apply_incoming":
       return { applied_count: 0 };
-    case "merge_incoming":
+    case "merge_incoming_with_token":
     case "merge_incoming_with_resolutions":
+    case "merge_variation_with_resolutions":
       return {
         version: {
           id: "mock-merged-version",
@@ -1224,6 +1215,7 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
       return null;
     case "preflight_merge_base":
     case "preflight_merge_incoming":
+    case "preflight_merge_variation":
       return {
         sync_status: {
           remote: (args as { request?: { remote?: string } })?.request?.remote ?? "origin",
@@ -1240,10 +1232,6 @@ function mockInvoke(cmd: string, args?: Record<string, unknown>): unknown {
         can_merge_cleanly: false,
         changed_workspace: false,
       };
-    case "check_large_files":
-      return [];
-    case "clone_from_url":
-      return null;
     default:
       // Handle tauri-plugin-store commands
       if (cmd.startsWith("plugin:store|")) {
@@ -1355,6 +1343,11 @@ function mockDocumentResult(cmd: string, args?: Record<string, unknown>): unknow
  * Install mocks on the window so Tauri API modules pick them up.
  * Must be called BEFORE any Tauri imports are evaluated.
  */
+function mockSavedVersion(id: string, label: string) {
+  const you = { name: "You", email: "dev@example.com" };
+  return { id, label, author: you, saved_by: you, time_seconds: Math.floor(Date.now() / 1000) };
+}
+
 export function installDevMocks() {
   if (typeof window === "undefined") return;
 

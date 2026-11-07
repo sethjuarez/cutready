@@ -35,6 +35,16 @@ describe("Send for review UI", () => {
     expect(sendForReview).toHaveBeenCalledWith("Launch demo", "Please review");
   });
 
+  it("prefills the description with the version comment", () => {
+    const sendForReview = vi.fn(async () => {});
+    useSyncStore.setState({ sendForReviewPrompt: { defaultTitle: "Tighten intro", defaultBody: "Cut the second demo." }, sendForReview });
+
+    render(<SendForReviewDialog />);
+    fireEvent.click(screen.getByRole("button", { name: "Send for review" }));
+
+    expect(sendForReview).toHaveBeenCalledWith("Tighten intro", "Cut the second demo.");
+  });
+
   it("cancels without sending", () => {
     const sendForReview = vi.fn(async () => {});
     useSyncStore.setState({ sendForReviewPrompt: { defaultTitle: "Tighten intro" }, sendForReview });

@@ -9,12 +9,15 @@ import {
   DraftlineErrorCode,
   draftlineErrorCode,
   friendlyDraftlineErrorMessage,
+  isStaleMergeTokenError,
+  MERGE_UPDATES_CHANGED_MESSAGE,
   mergeNeedsDeveloperMessage,
 } from "../services/draftlineErrors";
 import { getGitHubAuthStatus } from "../services/githubSetup";
 import { draftlinePathVariants } from "../utils/draftlinePaths";
 import type { ProjectView } from "../types/project";
 import type { RemoteInfo } from "../types/sketch";
+import { useMergeNameStore } from "./mergeNameStore";
 import { useToastStore } from "./toastStore";
 import { useAppStore, type AppStoreState, type EditorTab } from "./appStore";
 import { useVersioningStore } from "./versioningStore";
@@ -34,6 +37,8 @@ let remoteDetectionGeneration = 0;
 
 export function beginWorkspaceGeneration(path: string | null): void {
   workspaceGeneration += 1;
+  // A merge being named belongs to the old workspace.
+  useMergeNameStore.getState().answer(null);
   setDraftlineWorkspacePath(path);
 }
 
@@ -81,6 +86,11 @@ const GITHUB_REMOTE_AUTH_MESSAGE =
   "This project has a GitHub remote. Connect GitHub in Settings > Repository before syncing.";
 const GITHUB_REMOTE_AUTH_FAILED_MESSAGE =
   "GitHub rejected the remote operation. Reconnect GitHub in Settings, then try again.";
+
+/** For flows ending in a token-pinned merge: a moved head means the previewed updates changed. */
+export function mergeSyncErrorMessage(error: unknown): string {
+  return isStaleMergeTokenError(error) ? MERGE_UPDATES_CHANGED_MESSAGE : remoteSyncErrorMessage(error);
+}
 
 export function remoteSyncErrorMessage(error: unknown): string {
   const message = errorMessage(error);
@@ -304,6 +314,8 @@ export function tabExistsInLoadedProject(tab: EditorTab, state: AppStoreState): 
 export async function rewriteWorkspaceFiles(
   operation: () => Promise<void>,
   failureLabel: string,
+  /** Rethrow instead of toasting, for callers that show the error themselves. */
+  options: { rethrow?: boolean } = {},
 ): Promise<boolean> {
   const app = useAppStore.getState;
   const set = useAppStore.setState;
@@ -342,13 +354,13 @@ export async function rewriteWorkspaceFiles(
     });
     globalThis.setTimeout(() => clearSuppressedEditorFlushes(suppressedPaths), 100);
     await useVersioningStore.getState().checkDirty();
-    useSyncStore.setState({ syncError: null });
     return true;
   } catch (err) {
     clearSuppressedEditorFlushes(suppressedPaths);
     console.error(`${failureLabel}:`, err);
-    useToastStore.getState().show(`${failureLabel}: ${errorMessage(err)}`, 5000, "error");
+    if (!options.rethrow) useToastStore.getState().show(`${failureLabel}: ${errorMessage(err)}`, 5000, "error");
     await useVersioningStore.getState().checkDirty();
+    if (options.rethrow) throw err;
     return false;
   }
 }

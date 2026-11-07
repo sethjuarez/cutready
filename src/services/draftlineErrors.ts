@@ -13,7 +13,11 @@ export const DraftlineErrorCode = {
   GitIndexLocked: "git_index_locked",
   VariationOutsideNamespace: "variation_outside_namespace",
   LocalStateChanged: "local_state_changed",
+  RemoteRace: "remote_race",
   PreflightFailed: "preflight_failed",
+  ShelfOverlapsUnsavedChanges: "shelf_overlaps_unsaved_changes",
+  NothingToMerge: "nothing_to_merge",
+  InvalidMergeToken: "invalid_merge_token",
   SendBaseNotOnRemote: "send_base_not_on_remote",
   FolderIsElsewhere: "folder_is_elsewhere",
   FolderMissing: "folder_missing",
@@ -71,6 +75,8 @@ export const FINISH_IN_OTHER_FOLDER: SafeNextAction = "finish_in_other_folder";
 export const GIT_INDEX_LOCKED_MESSAGE = "Git is busy in this project's repository — try again in a moment. Nothing was changed.";
 export const LOCAL_STATE_CHANGED_MESSAGE =
   "The project changed outside CutReady while this was running (for example, a developer committed). Nothing was lost — try again.";
+export const MERGE_UPDATES_CHANGED_MESSAGE =
+  "The updates changed while you were naming the merge. Nothing was merged — get updates and try again.";
 export const VARIATION_OUTSIDE_NAMESPACE_MESSAGE =
   "That branch belongs to the code repository, not to CutReady. CutReady only works on its own branches and the main branch.";
 export const SEND_OUTSIDE_NAMESPACE_MESSAGE =
@@ -241,6 +247,19 @@ function sendBaseFromMessage(error: unknown): string | null {
   return /no branch `([^`]+)`/.exec(message)?.[1] ?? null;
 }
 
+/** Draftline refused a merge token because the project or remote moved after it was issued. */
+export function isStaleMergeTokenError(error: unknown): boolean {
+  const code = draftlineErrorCode(error);
+  return code === DraftlineErrorCode.LocalStateChanged || code === DraftlineErrorCode.RemoteRace;
+}
+
+/** Unsaved files a shelf apply refused to overwrite, or null for any other error. */
+export function shelfOverlapPaths(error: unknown): string[] | null {
+  if (draftlineErrorCode(error) !== DraftlineErrorCode.ShelfOverlapsUnsavedChanges) return null;
+  const paths = draftlineErrorDetails(error)?.paths;
+  return Array.isArray(paths) ? paths.filter((path): path is string => typeof path === "string") : [];
+}
+
 /** Errors where Draftline refused before changing anything, so retrying is safe. */
 export function isRetryableDraftlineError(error: unknown): boolean {
   const code = draftlineErrorCode(error);
@@ -329,6 +348,7 @@ export function friendlyDraftlineErrorMessage(error: unknown): string | null {
 const GUIDANCE_MESSAGES = [
   GIT_INDEX_LOCKED_MESSAGE,
   LOCAL_STATE_CHANGED_MESSAGE,
+  MERGE_UPDATES_CHANGED_MESSAGE,
   VARIATION_OUTSIDE_NAMESPACE_MESSAGE,
   SEND_OUTSIDE_NAMESPACE_MESSAGE,
   SEND_BASE_UNKNOWN_MESSAGE,

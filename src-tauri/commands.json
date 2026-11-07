@@ -163,8 +163,9 @@
     "list_storyboards",
     "list_support_refs",
     "list_variations",
-    "merge_incoming",
     "merge_incoming_with_resolutions",
+    "merge_incoming_with_token",
+    "merge_variation_with_resolutions",
     "migrate_to_multi_project",
     "move_project_folder",
     "open_capture_window",
@@ -178,9 +179,11 @@
     "open_recording_take_folder",
     "open_workspace",
     "preflight_apply_incoming",
+    "preflight_apply_shelf",
     "preflight_create_variation_from_version",
     "preflight_merge_base",
     "preflight_merge_incoming",
+    "preflight_merge_variation",
     "preflight_rename_variation",
     "preflight_switch_variation",
     "prepare_browser",
@@ -207,6 +210,8 @@
     "repair_recovery",
     "repair_workspace_manifest",
     "resolve_deep_link",
+    "restore_version_as_new_save",
+    "restore_version_paths_as_new_save",
     "retry_content_download",
     "rollback_recovery",
     "save",
@@ -256,6 +261,7 @@
     "write_visual_doc"
   ],
   "unsupported": {
+    "merge_incoming": "Replaced by merge_incoming_with_token (Draftline 0.12): clean merges are pinned to the previewed token.",
     "get_history": "Removed in arch v3 unit 2: no frontend caller; superseded by get_workspace_graph_for_variation and preview_version_file.",
     "get_full_history": "Removed in arch v3 unit 2: no frontend caller; superseded by get_workspace_graph_for_variation and preview_version_file.",
     "get_workspace_graph": "Removed in arch v3 unit 2: no frontend caller; superseded by get_workspace_graph_for_variation and preview_version_file.",
@@ -272,7 +278,6 @@
     "get_workspace_graph_compare_summary": "Removed in arch v3 unit 2: no frontend caller; superseded by get_workspace_graph_for_variation and preview_version_file.",
     "diff_workspace_file": "Removed in arch v3 unit 2: no frontend caller; superseded by get_workspace_graph_for_variation and preview_version_file.",
     "preview_version": "Removed in arch v3 unit 2: no frontend caller; superseded by get_workspace_graph_for_variation and preview_version_file.",
-    "restore_version_as_new_save": "Removed in arch v3 unit 2: restore-as-new-save UI was unreachable; restore starts a new variation from the save instead.",
     "restore_version_as_new_save_to_variation": "Removed in arch v3 unit 2: restore-as-new-save UI was unreachable; restore starts a new variation from the save instead."
   }
 }

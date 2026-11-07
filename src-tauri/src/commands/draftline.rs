@@ -256,7 +256,7 @@ pub async fn clone_from_url(url: String, dest: String) -> Result<(), String> {
         .map_err(|error| error.to_string())
 }
 
-fn context_for_workspace(
+pub(super) fn context_for_workspace(
     workspace_path: &Path,
     app: AppHandle,
 ) -> contract::TauriCommandResult<contract::DraftlineCommandContext<'static>> {
@@ -264,7 +264,7 @@ fn context_for_workspace(
 }
 
 /// Context for commands that record a new version under the acting contributor.
-fn context_for_commit(
+pub(super) fn context_for_commit(
     workspace_path: &Path,
     app: AppHandle,
 ) -> contract::TauriCommandResult<contract::DraftlineCommandContext<'static>> {
@@ -274,7 +274,7 @@ fn context_for_commit(
         .map_err(context_error)
 }
 
-fn context_error(message: String) -> contract::TauriCommandError {
+pub(super) fn context_error(message: String) -> contract::TauriCommandError {
     contract::TauriCommandError {
         code: "cutready_context_error".into(),
         message,
@@ -507,6 +507,7 @@ pub async fn switch_variation(
         // Draftline's SaveFirst commits under git config, so save with the acting
         // user's profile here. A clean workspace saves nothing and needs no author.
         DraftlineSwitchPolicyInput::SaveFirst { label } => {
+            let label = cutready_versioning::naming::validate_version_message(&label)?;
             let preflight = adapter
                 .preflight_switch_variation(&request.variation_id)
                 .map_err(|error| error.to_string())?;
@@ -608,16 +609,6 @@ pub async fn preview_workspace_file(
     contract::into_tauri_result(contract::preview_workspace_file_with_context(
         &context, request,
     ))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn save(
-    request: contract::SaveRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<contract::SaveResult> {
-    let _guard = write_lock::lock(&request.workspace_path).map_err(context_error)?;
-    let mut context = context_for_commit(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::save_with_context(&mut context, request))
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -815,16 +806,6 @@ pub async fn delete_shelf(
     let _guard = write_lock::lock(&request.workspace_path).map_err(context_error)?;
     let mut context = context_for_workspace(&request.workspace_path, app)?;
     contract::into_tauri_result(contract::delete_shelf_with_context(&mut context, request))
-}
-
-#[auditaur_command(skip_all)]
-pub async fn selected_save(
-    request: contract::SelectedSaveRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<contract::SelectedSaveResult> {
-    let _guard = write_lock::lock(&request.workspace_path).map_err(context_error)?;
-    let mut context = context_for_commit(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::selected_save_with_context(&mut context, request))
 }
 
 #[auditaur_command(skip_all)]
@@ -1149,16 +1130,6 @@ pub async fn preflight_merge_incoming(
 }
 
 #[auditaur_command(skip_all)]
-pub async fn merge_incoming(
-    request: contract::MergeIncomingRequest,
-    app: AppHandle,
-) -> contract::TauriCommandResult<contract::MergeIncomingCommandResult> {
-    let _guard = write_lock::lock(&request.workspace_path).map_err(context_error)?;
-    let mut context = context_for_commit(&request.workspace_path, app)?;
-    contract::into_tauri_result(contract::merge_incoming_with_context(&mut context, request))
-}
-
-#[auditaur_command(skip_all)]
 pub async fn merge_incoming_with_resolutions(
     mut request: contract::MergeIncomingWithResolutionsRequest,
     app: AppHandle,
@@ -1175,7 +1146,7 @@ pub async fn merge_incoming_with_resolutions(
 /// Whole-file `.sk` resolutions go through the sketch codec so merged sketches
 /// get row ids and never carry duplicates. Unparseable content passes through
 /// unchanged, as before.
-fn canonicalize_sketch_resolutions(
+pub(super) fn canonicalize_sketch_resolutions(
     resolutions: &mut [draftline::MergeConflictResolution],
 ) -> Result<(), contract::TauriCommandError> {
     use cutready_core::document::{self, DocumentError};

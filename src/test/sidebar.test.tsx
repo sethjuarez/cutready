@@ -14,7 +14,7 @@ vi.mock("../components/UpdateAvailableButton", () => ({ UpdateAvailableButton: (
 
 import { initials, Sidebar } from "../components/Sidebar";
 import { invoke } from "../services/tauri";
-import { TreeRow } from "../components/docTree/TreeRow";
+import { TreeRow, treeRowTone } from "../components/docTree/TreeRow";
 import { useExitChatFocusOnNavigate } from "../hooks/useExitChatFocusOnNavigate";
 import { useAppStore } from "../stores/appStore";
 import { useChatStore } from "../stores/chatStore";
@@ -37,7 +37,6 @@ describe("panelOwner", () => {
   it("maps views to the row that owns them", () => {
     expect(panelOwner("assets")).toBe("media");
     expect(panelOwner("narrations")).toBe("media");
-    expect(panelOwner("changes")).toBe("changes");
     expect(panelOwner("project")).toBe("project");
     expect(panelOwner("recording")).toBe("project");
     expect(panelOwner("chat")).toBeNull();
@@ -101,17 +100,6 @@ describe("Sidebar", () => {
     expect(screen.queryByTestId("media-unused-count")).toBeNull();
   });
 
-  it("shows the Changes list as a closable section in the Changes view", () => {
-    const setView = vi.fn();
-    act(() => useAppStore.setState({ currentProject: project, view: "changes", setView }));
-    render(<Sidebar panel={<div data-testid="panel-body" />} />);
-
-    const section = screen.getByTestId("nav-changes");
-    expect(section).toContainElement(screen.getByTestId("panel-body"));
-    fireEvent.click(screen.getByRole("button", { name: "Close changes" }));
-    expect(setView).toHaveBeenCalledWith("project");
-  });
-
   it("keeps the background view's selection while Settings is open", () => {
     act(() => useAppStore.setState({ currentProject: project, view: "settings" }));
     render(<Sidebar panelView="assets" />);
@@ -120,15 +108,14 @@ describe("Sidebar", () => {
     expect(screen.getByTestId("activity-settings")).toHaveAttribute("aria-current", "page");
   });
 
-  it("collapses to a zero-width, inert track without the panel", () => {
-    act(() => useAppStore.setState({ currentProject: project, view: "changes" }));
-    render(<Sidebar expanded={false} width={300} panel={<div data-testid="panel-body" />} />);
+  it("collapses to a zero-width, inert track", () => {
+    act(() => useAppStore.setState({ currentProject: project, view: "project" }));
+    render(<Sidebar expanded={false} width={300} />);
 
     const nav = screen.getByTestId("app-nav");
     expect(nav).toHaveAttribute("data-expanded", "false");
     expect(nav).toHaveAttribute("inert");
     expect(nav.style.width).toBe("0px");
-    expect(screen.queryByTestId("panel-body")).toBeNull();
   });
 
   it("hides the Library without a project", () => {
@@ -231,5 +218,13 @@ describe("navigating while chat focus is on", () => {
 
     act(() => useAppStore.setState({ view: "home" }));
     expect(useChatStore.getState().chatFocusMode).toBe(false);
+  });
+  it("tints document row icons by content type and leaves the label alone", () => {
+    expect(["storyboard", "sketch", "note", "chat", "media", "history"].map(treeRowTone))
+      .toEqual(["storyboard", "sketch", "note", "chat-artifact", undefined, undefined]);
+    render(<TreeRow label="Intro" icon="sketch" kind="sketch" selected onOpen={() => {}} testId="tinted" />);
+    const row = screen.getByTestId("tinted");
+    expect(row.querySelector(".ico")).toHaveAttribute("data-tone", "sketch");
+    expect(row.querySelector(".lbl")).not.toHaveAttribute("data-tone");
   });
 });

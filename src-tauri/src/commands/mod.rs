@@ -6,6 +6,8 @@ pub mod animation;
 pub mod automation;
 pub mod diagnostics;
 pub mod draftline;
+pub mod draftline_merge;
+pub mod draftline_shelf;
 pub mod export;
 pub mod feedback;
 pub mod github;
@@ -30,6 +32,7 @@ pub mod sketch;
 #[allow(clippy::result_large_err)]
 pub mod storyboard;
 pub mod terminal;
+pub mod version_saves;
 pub mod video_import;
 
 /// The typed error envelope commands return (ADR 0003): `command_failed` with

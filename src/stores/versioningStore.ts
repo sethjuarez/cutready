@@ -2,12 +2,12 @@
 // F6). Project/editor state stays in appStore and remote collaboration lives in
 // syncStore; both are read with getState() inside actions only.
 import { create } from "zustand";
+import type { MergeConflictResolution } from "@draftline/client";
 import {
   createDraftlineVariation,
   deleteDraftlineVariation,
   discardDraftlineChanges,
   discardDraftlineFile,
-  hasDraftlineShelf,
   hasDraftlineChanges,
   isDraftlineVariationCreateConflictError,
   listDraftlineChangedFiles,
@@ -17,11 +17,9 @@ import {
   listDraftlineVersions,
   preflightDraftlineSwitchVariation,
   mergeDraftlineIncomingWithResolutions,
-  popDraftlineShelf,
   preflightDraftlineRenameVariation,
   renameDraftlineVariation,
   saveDraftlineVersion,
-  shelveDraftlineChanges,
   switchDraftlineVariation,
   HEALTHY_PROJECT,
   clearDraftlineStaleLock,
@@ -35,10 +33,17 @@ import {
 import { useToastStore } from "./toastStore";
 import { useAppStore } from "./appStore";
 import { useSyncStore } from "./syncStore";
+import { activeTimelineLabel, askMergeName } from "../services/mergeName";
+import { mergeVariation, runVariationMerge, variationMergeErrorMessage } from "../services/variationMerge";
+import { isStaleMergeTokenError, MERGE_UPDATES_CHANGED_MESSAGE } from "../services/draftlineErrors";
+import { deleteSetAsideShelf, listSetAsideShelves, restoreSetAsideShelf, setAsideChanges } from "../services/setAsideShelves";
+import { shelfConflictText, shelfRestoreBlocker } from "../services/shelves";
+import { DEFAULT_SET_ASIDE_NAME, type IncomingVersion, type SetAsideShelf } from "../domain/versioning";
 import {
   clearActiveDocumentState,
   currentWorkspaceGeneration,
   errorMessage,
+  flushEditorWrites,
   loadingDocumentStateForTab,
   replaceWorkspaceFile,
   rewriteWorkspaceFiles,
@@ -50,7 +55,6 @@ import type {
   GraphNode,
   DiffEntry,
   ConflictFile,
-  MergeResult,
   FileResolution,
 } from "../types/sketch";
 
@@ -61,22 +65,18 @@ export interface VersioningState {
   timelines: TimelineInfo[];
   /** Full graph data for SVG rendering. */
   graphNodes: GraphNode[];
-  /** Whether the snapshot name prompt should be shown (triggered by Ctrl+S). */
-  snapshotPromptOpen: boolean;
-  /** After saving a snapshot, navigate to this commit ID (used by nav-save flow). */
-  pendingNavAfterSave: string | null;
-  /** After saving a snapshot, switch to this branch. */
-  pendingTimelineAfterSave: string | null;
   /** Branch created from a historical snapshot that has not recorded its first new save yet. */
   startedBranchFromSnapshot: { branchName: string; snapshotId: string } | null;
   /** Whether there are unsaved changes since the last snapshot. */
   isDirty: boolean;
   /** List of changed files since last snapshot (for Changes panel). */
   changedFiles: DiffEntry[];
-  /** Whether a quickSave is in progress. */
+  /** Whether a version save is in progress. */
   saving: boolean;
-  /** Whether a stash (temporarily saved work) exists. */
-  hasStash: boolean;
+  /** Work set aside to bring back later, newest first. */
+  setAsideShelves: SetAsideShelf[];
+  /** A set-aside restore or delete is running. */
+  setAsideBusy: boolean;
   projectHealth: DraftlineProjectHealth;
   projectHealthBusy: boolean;
   /** Whether we are viewing a rewound snapshot (prev-tip exists). */
@@ -95,6 +95,8 @@ export interface VersioningState {
   draftlineMergeToken: DraftlineMergeIncomingToken | null;
   /** Remote that produced the currently displayed incoming conflict set. */
   draftlineMergeRemote: string | null;
+  /** Versions the displayed conflict set brings in, for naming the merge. */
+  draftlineMergeIncoming: IncomingVersion[];
 
   // ── Diff ──────────────────────────────────────────────────
   /** Currently selected diff result (file changes between two snapshots). */
@@ -112,8 +114,8 @@ export interface VersioningActions {
   refreshChangedFiles: () => Promise<void>;
   /** Save a labeled version. Optional forkLabel for naming the old timeline when forking. */
   saveVersion: (label: string, forkLabel?: string) => Promise<void>;
-  /** Shelve all unsaved changes so the workspace is clean. False if nothing was shelved. */
-  stashChanges: () => Promise<boolean>;
+  /** Sets all unsaved changes aside in a new shelf so the workspace is clean. False if nothing was set aside. */
+  stashChanges: (name?: string) => Promise<boolean>;
   /** Discard all working-directory changes, resetting to last snapshot. */
   discardChanges: () => Promise<void>;
   /** Discard changes for one file. */
@@ -127,9 +129,11 @@ export interface VersioningActions {
     filePath: string,
     replace: (paths: { repoPath: string; projectPath: string }) => Promise<unknown>,
   ) => Promise<void>;
-  /** Restore shelved changes into the workspace. */
-  popStash: () => Promise<void>;
-  /** Check whether a stash exists. */
+  /** Brings one set-aside shelf back into the workspace and deletes it. */
+  popStash: (shelfId: string) => Promise<void>;
+  /** Deletes a set-aside shelf for good. */
+  dropStash: (shelfId: string) => Promise<void>;
+  /** Reloads the set-aside shelves. */
   checkStash: () => Promise<void>;
   /** Interrupted operations, stale locks, and missing LFS content for the open project. */
   checkProjectHealth: (options?: { probeContent?: boolean }) => Promise<void>;
@@ -155,24 +159,23 @@ export interface VersioningActions {
   switchTimeline: (name: string) => Promise<void>;
   /** Rename the legacy master variation (or a branch the remote renamed) to the new base name. */
   renameLegacyMasterTimeline: () => Promise<void>;
+  /** Rename a timeline; false when it failed (already reported). */
+  renameTimeline: (from: string, to: string) => Promise<boolean>;
   /** Delete a non-active timeline. */
   deleteTimeline: (name: string) => Promise<void>;
   /** Promote a fork timeline to become the new main. */
   promoteTimeline: (name: string) => Promise<void>;
   /** Load full graph data for SVG rendering. */
   loadGraphData: () => Promise<void>;
-  /** Open the named snapshot flow for legacy quick-save callers. */
-  quickSave: () => Promise<void>;
-  /** Open snapshot name prompt (and ensure panel is visible). */
-  promptSnapshot: () => Promise<void>;
   /** Compare HEAD against the working directory. */
   diffWorkingTree: () => Promise<DiffEntry[]>;
   /** Check for large files before pushing. Returns list of (path, size). */
   checkLargeFiles: () => Promise<Array<[string, number]>>;
-  /** Merge source timeline into target timeline. */
-  mergeTimelines: (source: string, target: string) => Promise<MergeResult>;
+  /** Merge another local timeline into the current one, after the user names the merge. */
+  mergeTimelines: (source: TimelineInfo) => Promise<void>;
   /** Apply user-provided conflict resolutions and create merge commit. */
-  applyMergeResolution: (resolutions: FileResolution[]) => Promise<string>;
+  /** Resolves to the merge commit, or null when the user cancels naming it. */
+  applyMergeResolution: (resolutions: FileResolution[]) => Promise<string | null>;
   /** Cancel an in-progress merge. */
   cancelMerge: () => void;
 }
@@ -190,13 +193,11 @@ export function resetVersioningState(): Omit<VersioningState, "saving"> {
     versions: [],
     timelines: [],
     graphNodes: [],
-    snapshotPromptOpen: false,
-    pendingNavAfterSave: null,
-    pendingTimelineAfterSave: null,
     startedBranchFromSnapshot: null,
     isDirty: false,
     changedFiles: [],
-    hasStash: false,
+    setAsideShelves: [],
+    setAsideBusy: false,
     projectHealth: HEALTHY_PROJECT,
     projectHealthBusy: false,
     isRewound: false,
@@ -206,6 +207,7 @@ export function resetVersioningState(): Omit<VersioningState, "saving"> {
     mergeConflicts: [],
     draftlineMergeToken: null,
     draftlineMergeRemote: null,
+    draftlineMergeIncoming: [],
     diffResult: null,
     diffSelection: null,
   };
@@ -278,14 +280,13 @@ export const useVersioningStore = create<VersioningStoreState>((set, get) => ({
     }
   },
 
-  stashChanges: async () => {
-    if (get().hasStash) {
-      useToastStore.getState().show("Restore your shelved changes before shelving more.", 5000, "warning");
-      return false;
-    }
-    const shelved = await rewriteWorkspaceFiles(shelveDraftlineChanges, "Shelve failed");
-    if (shelved) await get().checkStash();
-    return shelved && get().hasStash;
+  stashChanges: async (name = DEFAULT_SET_ASIDE_NAME) => {
+    let shelved = false;
+    const ok = await rewriteWorkspaceFiles(async () => {
+      shelved = await setAsideChanges(name);
+    }, "Set aside failed");
+    await get().checkStash();
+    return ok && shelved;
   },
 
   discardChanges: async () => {
@@ -303,21 +304,49 @@ export const useVersioningStore = create<VersioningStoreState>((set, get) => ({
     }
   },
 
-  popStash: async () => {
-    let restored = false;
-    await rewriteWorkspaceFiles(async () => {
-      restored = await popDraftlineShelf();
-    }, "Restore failed");
-    await get().checkStash();
-    if (restored) useToastStore.getState().show("Shelved changes restored.", 3000, "success");
+  popStash: async (shelfId) => {
+    if (get().setAsideBusy) return;
+    set({ setAsideBusy: true });
+    const toast = useToastStore.getState();
+    try {
+      // Draftline refuses only when unsaved files overlap the shelf; check before editors close.
+      await flushEditorWrites();
+      const blocked = await shelfRestoreBlocker(shelfId);
+      let outcome: Awaited<ReturnType<typeof restoreSetAsideShelf>> = blocked ?? { kind: "missing" };
+      if (!blocked) {
+        await rewriteWorkspaceFiles(async () => {
+          outcome = await restoreSetAsideShelf(shelfId);
+        }, "Restore failed");
+      }
+      await get().checkStash();
+      const result = outcome as Awaited<ReturnType<typeof restoreSetAsideShelf>>;
+      if (result.kind === "restored") toast.show("Set-aside changes restored.", 3000, "success");
+      else if (result.kind === "conflict") toast.show(`Couldn't restore: ${shelfConflictText(result.paths)}. Save or set them aside first.`, 6000, "warning");
+    } finally {
+      set({ setAsideBusy: false });
+    }
+  },
+
+  dropStash: async (shelfId) => {
+    if (get().setAsideBusy) return;
+    set({ setAsideBusy: true });
+    try {
+      await deleteSetAsideShelf(shelfId);
+    } catch (err) {
+      console.error("Failed to delete set-aside changes:", err);
+      useToastStore.getState().show(`Delete failed: ${errorMessage(err)}`, 5000, "error");
+    } finally {
+      await get().checkStash();
+      set({ setAsideBusy: false });
+    }
   },
 
   checkStash: async () => {
     const generation = currentWorkspaceGeneration();
     try {
-      const hasStash = await hasDraftlineShelf();
+      const setAsideShelves = await listSetAsideShelves();
       if (generation !== currentWorkspaceGeneration()) return;
-      set({ hasStash });
+      set({ setAsideShelves });
     } catch (err) {
       console.error("Failed to check stash:", err);
     }
@@ -564,18 +593,23 @@ export const useVersioningStore = create<VersioningStoreState>((set, get) => ({
       return;
     }
 
+    if (await get().renameTimeline(from, to)) useSyncStore.setState({ baseRename: null, syncError: null });
+  },
+
+  renameTimeline: async (from, to) => {
     try {
       const preflight = await preflightDraftlineRenameVariation(from, to);
       await renameDraftlineVariation(from, to, preflight.token);
-      useSyncStore.setState({ baseRename: null, syncError: null });
       await get().loadTimelines();
       await get().loadVersions();
       await get().loadGraphData();
       await get().checkDirty();
       useToastStore.getState().show(`Renamed branch ${from} to ${to}. Publish again to share it.`, 5000, "success");
+      return true;
     } catch (err) {
       console.error("Failed to rename Draftline branch:", err);
       useToastStore.getState().show(`Rename failed: ${errorMessage(err)}`, 5000, "error");
+      return false;
     }
   },
 
@@ -613,14 +647,6 @@ export const useVersioningStore = create<VersioningStoreState>((set, get) => ({
     }
   },
 
-  quickSave: async () => {
-    await get().promptSnapshot();
-  },
-
-  promptSnapshot: async () => {
-    set({ snapshotPromptOpen: true });
-  },
-
   diffWorkingTree: async () => {
     const generation = currentWorkspaceGeneration();
     try {
@@ -645,28 +671,68 @@ export const useVersioningStore = create<VersioningStoreState>((set, get) => ({
 
   // ── Merge actions ─────────────────────────────────────────
 
-  mergeTimelines: async (source, target) => {
-    console.warn("Draftline variation merge is not available yet:", source, target);
-    useToastStore.getState().show("Draftline does not support merging variations yet.", 5000, "info");
-    return { status: "conflicts", conflicts: [] };
+  mergeTimelines: async (source) => {
+    const target = activeTimelineLabel(get().timelines) ?? "this timeline";
+    const label = source.label || source.name;
+    const outcome = await runVariationMerge({ id: source.name, label }, target);
+    const toast = useToastStore.getState();
+    if (outcome.kind === "failed") {
+      toast.show(outcome.message, 6000, "error");
+      // A refused merge often means a timeline moved; show its current state.
+      await get().loadTimelines();
+    }
+    if (outcome.kind === "merged") {
+      await reloadAfterMerge();
+      toast.showUpdate(`Merged ${label} into ${target}.`, "success");
+    }
+    if (outcome.kind !== "conflicts") return;
+    const { conflicts, token, incoming } = outcome.report;
+    set({ isMerging: true, mergeSource: label, mergeTarget: target, mergeConflicts: conflicts, draftlineMergeToken: token, draftlineMergeRemote: null, draftlineMergeIncoming: incoming });
+    toast.showUpdate(`Merging ${label} needs conflict resolution.`, "info");
   },
 
   applyMergeResolution: async (resolutions) => {
-    const { draftlineMergeToken, draftlineMergeRemote } = get();
-    if (!draftlineMergeToken || !draftlineMergeRemote) throw new Error("No Draftline merge in progress");
+    const { draftlineMergeToken, draftlineMergeRemote, draftlineMergeIncoming, mergeSource, mergeTarget } = get();
+    // Timeline merges are local: their token names no remote.
+    const local = draftlineMergeToken?.local === true;
+    if (!draftlineMergeToken || (!draftlineMergeRemote && !local)) throw new Error("No Draftline merge in progress");
 
     // Base merges carry the base branch name as the token source.
-    const base = (draftlineMergeToken as { source?: string | null }).source ?? null;
-    const commitId = await mergeDraftlineIncomingWithResolutions(
-      draftlineMergeToken,
-      base ? `Bring in latest ${base}` : "Resolve incoming saves",
-      resolutions.map((resolution) => ({
-        path: resolution.path,
-        field_path: null,
-        choice: { kind: "use_content", content: resolution.content },
-      })),
-      draftlineMergeRemote,
-    );
+    const base = local ? null : draftlineMergeToken.source ?? null;
+    const source = local ? mergeSource ?? draftlineMergeToken.source ?? "" : base ?? activeTimelineLabel(get().timelines) ?? draftlineMergeRemote ?? "";
+    const message = await askMergeName(source, draftlineMergeIncoming);
+    if (!message) return null;
+    const dto = resolutions.map((resolution): MergeConflictResolution => ({
+      path: resolution.path,
+      field_path: null,
+      choice: { kind: "use_content", content: resolution.content },
+    }));
+    let commitId: string;
+    try {
+      commitId = local
+        ? await mergeVariation(draftlineMergeToken, message, dto)
+        : await mergeDraftlineIncomingWithResolutions(draftlineMergeToken, message, dto, draftlineMergeRemote ?? undefined);
+    } catch (err) {
+      if (local) {
+        get().cancelMerge();
+        useToastStore.getState().show(variationMergeErrorMessage(err, source, mergeTarget ?? "this timeline"), 6000, "error");
+        await get().loadTimelines();
+        return null;
+      }
+      if (!isStaleMergeTokenError(err)) throw err;
+      // The token can't be reused; nothing was merged, so end the merge and ask for a fresh start.
+      get().cancelMerge();
+      useToastStore.getState().show(MERGE_UPDATES_CHANGED_MESSAGE, 6000, "error");
+      try {
+        await sync().refreshSyncStatus();
+        await sync().refreshIncomingCommits();
+      } catch {
+        // The stale-token message below matters more than a failed refresh.
+      }
+      // Set after the refresh, which clears syncError on success.
+      useSyncStore.setState({ syncError: MERGE_UPDATES_CHANGED_MESSAGE });
+      return null;
+    }
     set({
       isMerging: false,
       mergeSource: null,
@@ -674,17 +740,11 @@ export const useVersioningStore = create<VersioningStoreState>((set, get) => ({
       mergeConflicts: [],
       draftlineMergeToken: null,
       draftlineMergeRemote: null,
+      draftlineMergeIncoming: [],
     });
-    await app().loadSketches();
-    await app().loadStoryboards();
-    await app().loadNotes();
-    await sync().refreshSyncStatus();
-    await sync().refreshIncomingCommits();
-    await get().loadVersions();
-    await get().loadGraphData();
-    await get().loadTimelines();
-    await get().checkDirty();
-    useToastStore.getState().showUpdate(base ? `Updates from ${base} brought in.` : "Incoming saves merged.", "success");
+    await reloadAfterMerge();
+    const done = local ? `Merged ${source} into ${mergeTarget ?? "this timeline"}.` : base ? `Updates from ${base} brought in.` : "Incoming saves merged.";
+    useToastStore.getState().showUpdate(done, "success");
     return commitId;
   },
 
@@ -696,6 +756,23 @@ export const useVersioningStore = create<VersioningStoreState>((set, get) => ({
       mergeConflicts: [],
       draftlineMergeToken: null,
       draftlineMergeRemote: null,
+      draftlineMergeIncoming: [],
     });
   },
 }));
+
+/** Reload documents, history and status after a merge wrote a new version. */
+async function reloadAfterMerge(): Promise<void> {
+  const app = useAppStore.getState();
+  await app.loadSketches();
+  await app.loadStoryboards();
+  await app.loadNotes();
+  const sync = useSyncStore.getState();
+  await sync.refreshSyncStatus();
+  await sync.refreshIncomingCommits();
+  const versioning = useVersioningStore.getState();
+  await versioning.loadVersions();
+  await versioning.loadGraphData();
+  await versioning.loadTimelines();
+  await versioning.checkDirty();
+}

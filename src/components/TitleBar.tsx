@@ -5,7 +5,8 @@ import { PanelBottom, PanelLeft, Search, Sparkles } from "lucide-react";
 import { useAppStore } from "../stores/appStore";
 import { isMac, formatKeybinding } from "../utils/platform";
 import { ProjectSwitcher } from "./ProjectSwitcher";
-import { TitleBarSyncStatus, TitleBarVariationChip } from "./TitleBarStatus";
+import { TimelineMenu } from "./versioning/TimelineMenu";
+import { StatusChip } from "./versioning/StatusChip";
 import { WindowControls } from "./WindowControls";
 
 interface TitleBarProps {
@@ -99,7 +100,7 @@ export function TitleBar({
           <>
             <span aria-hidden="true" className="h-4 w-px shrink-0 bg-[rgb(var(--color-border))] max-[1100px]:hidden" />
             <ProjectSwitcher variant="title" />
-            <TitleBarVariationChip />
+            <TimelineMenu />
           </>
         )}
       </div>
@@ -120,7 +121,7 @@ export function TitleBar({
       </button>
 
       <div className="flex h-full min-w-0 items-center justify-end gap-1.5">
-        {currentProject && <TitleBarSyncStatus />}
+        {currentProject && <StatusChip />}
         <div className="flex items-center gap-0.5" role="group" aria-label="Layout">
           <PanelToggle
             label="Sidebar"

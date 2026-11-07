@@ -27,6 +27,9 @@ import {
   type WorkspaceGraphRef,
 } from "@draftline/client";
 import { invoke, listen } from "./tauri";
+import { draftlineIpc } from "../ipc/draftline";
+import { DraftlineVariationCreateConflictError, variationCreatePreflightFromError } from "./draftlineVariationConflict";
+import { incomingVersions, type IncomingVersion } from "../domain/versioning/mergeSuggest";
 import type { BaseStatus, ConflictFile, DiffEntry, GraphNode, IncomingCommit, RemoteBranchInfo, RemoteInfo, SyncStatus, TimelineInfo, VersionEntry } from "../types/sketch";
 
 export type DraftlineMergeIncomingToken = MergeIncomingToken;
@@ -38,22 +41,7 @@ export type DraftlineSwitchVariationPreflight = PreflightReport;
 export type DraftlineSwitchVariationResult = SwitchVariationResult;
 export type DraftlineVariationCreatePreflight = VariationCreatePreflight;
 export type DraftlineVariationCreateToken = VariationCreateToken;
-
-export class DraftlineVariationCreateConflictError extends Error {
-  readonly preflight: VariationCreatePreflight;
-
-  constructor(preflight: VariationCreatePreflight) {
-    super(variationCreateConflictMessage(preflight));
-    this.name = "DraftlineVariationCreateConflictError";
-    this.preflight = preflight;
-  }
-}
-
-export function isDraftlineVariationCreateConflictError(
-  error: unknown,
-): error is DraftlineVariationCreateConflictError {
-  return error instanceof DraftlineVariationCreateConflictError;
-}
+export { DraftlineVariationCreateConflictError, isDraftlineVariationCreateConflictError } from "./draftlineVariationConflict";
 
 export interface DraftlineMergeIncomingReport {
   syncStatus: {
@@ -68,6 +56,8 @@ export interface DraftlineMergeIncomingReport {
   canMergeCleanly: boolean;
   changedWorkspace: boolean;
   viewModel: MergeConflictViewModel;
+  /** The versions the merge brings in, for naming it. */
+  incoming: IncomingVersion[];
 }
 
 export interface DraftlinePreviewFile {
@@ -100,7 +90,7 @@ let draftlineWorkspacePath: string | null = null;
 let cachedFacade: DraftlineHostFacade | null = null;
 let cachedFacadePath: string | null = null;
 
-const draftlineClient = createDraftlineClient({ invoke, listen });
+export const draftlineClient = createDraftlineClient({ invoke, listen });
 
 export function setDraftlineWorkspacePath(path: string | null) {
   draftlineWorkspacePath = path;
@@ -108,7 +98,7 @@ export function setDraftlineWorkspacePath(path: string | null) {
   cachedFacadePath = null;
 }
 
-function facade(): DraftlineHostFacade {
+export function facade(): DraftlineHostFacade {
   if (!draftlineWorkspacePath) {
     throw new Error("No Draftline workspace is currently open");
   }
@@ -130,7 +120,7 @@ function facade(): DraftlineHostFacade {
  * snapshot. Re-reading the mutable global after an await lets a concurrent
  * workspace switch retarget the operation (see issue #263).
  */
-function requireWorkspacePath(): string {
+export function requireWorkspacePath(): string {
   if (!draftlineWorkspacePath) {
     throw new Error("No Draftline workspace is currently open");
   }
@@ -166,6 +156,7 @@ export async function listDraftlineGraphNodes(): Promise<GraphNode[]> {
     return {
       id: node.version.id,
       message: node.version.label,
+      comment: node.version.comment ?? undefined,
       timestamp: new Date(node.version.time_seconds * 1000).toISOString(),
       timeline,
       parents: node.parent_version_ids,
@@ -287,9 +278,7 @@ export async function deleteDraftlineVariation(variation: string): Promise<void>
   if (!draftlineWorkspacePath) {
     throw new Error("No Draftline workspace is currently open");
   }
-  await invoke("delete_variation", {
-    request: { workspace_path: draftlineWorkspacePath, variation },
-  });
+  await draftlineIpc.deleteVariation(draftlineWorkspacePath, variation);
 }
 
 export async function preflightDraftlineRenameVariation(
@@ -299,13 +288,7 @@ export async function preflightDraftlineRenameVariation(
   if (!draftlineWorkspacePath) {
     throw new Error("No Draftline workspace is currently open");
   }
-  return invoke<VariationRenamePreflight>("preflight_rename_variation", {
-    request: {
-      workspace_path: draftlineWorkspacePath,
-      source_variation_id: sourceVariationId,
-      target_variation_id: targetVariationId,
-    },
-  });
+  return draftlineIpc.preflightRenameVariation(draftlineWorkspacePath, sourceVariationId, targetVariationId);
 }
 
 export async function renameDraftlineVariation(
@@ -316,14 +299,7 @@ export async function renameDraftlineVariation(
   if (!draftlineWorkspacePath) {
     throw new Error("No Draftline workspace is currently open");
   }
-  return invoke<RenameVariationResult>("rename_variation", {
-    request: {
-      workspace_path: draftlineWorkspacePath,
-      source_variation_id: sourceVariationId,
-      target_variation_id: targetVariationId,
-      token,
-    },
-  });
+  return draftlineIpc.renameVariation(draftlineWorkspacePath, sourceVariationId, targetVariationId, token);
 }
 
 export async function preflightDraftlineSwitchVariation(variation: string): Promise<PreflightReport> {
@@ -343,9 +319,7 @@ export async function addDraftlineRemote(name: string, url: string): Promise<Rem
   if (!draftlineWorkspacePath) {
     throw new Error("No Draftline workspace is currently open");
   }
-  const remote = await invoke<{ name: string; url: string }>("add_remote", {
-    request: { workspace_path: draftlineWorkspacePath, name, url },
-  });
+  const remote = await draftlineIpc.addRemote(draftlineWorkspacePath, name, url);
   return { name: remote.name, url: remote.url };
 }
 
@@ -387,14 +361,12 @@ export interface DraftlineSendForReviewOptions {
 export async function sendForReview(
   options: DraftlineSendForReviewOptions,
 ): Promise<DraftlineSendResult> {
-  return invoke<DraftlineSendResult>("send_for_review", {
-    request: {
-      workspace_path: requireWorkspacePath(),
-      remote: options.remote,
-      title: options.title,
-      body: options.body?.trim() ? options.body : null,
-      base: options.base?.trim() ? options.base : null,
-    },
+  return draftlineIpc.sendForReview({
+    workspace_path: requireWorkspacePath(),
+    remote: options.remote,
+    title: options.title,
+    body: options.body?.trim() ? options.body : null,
+    base: options.base?.trim() ? options.base : null,
   });
 }
 
@@ -419,8 +391,16 @@ export async function preflightDraftlineMergeIncoming(remote: string): Promise<D
   return mergeIncomingReportToDto(await facade().preflightMergeIncoming(remote));
 }
 
-export async function mergeDraftlineIncoming(remote: string, label: string): Promise<string> {
-  const result = await facade().mergeIncoming(label, remote);
+/**
+ * Clean incoming or base merge pinned to the previewed token: refuses with
+ * `local_state_changed` / `remote_race` if either head moved since.
+ */
+export async function mergeDraftlineIncomingWithToken(
+  token: MergeIncomingToken,
+  label: string,
+  remote = token.remote,
+): Promise<string> {
+  const result = await facade().mergeIncomingWithToken(label, token, remote);
   return result.merge.version.id;
 }
 
@@ -435,9 +415,7 @@ export async function mergeDraftlineIncomingWithResolutions(
 }
 
 async function readDraftlineSyncStatus(remote: string): Promise<DraftlineSyncStatusDto> {
-  return invoke<DraftlineSyncStatusDto>("get_sync_status", {
-    request: { workspace_path: requireWorkspacePath(), remote },
-  });
+  return draftlineIpc.syncStatus(requireWorkspacePath(), remote);
 }
 
 export async function getDraftlineSyncStatus(remote: string): Promise<SyncStatus> {
@@ -453,9 +431,7 @@ export async function getDraftlineSyncStatus(remote: string): Promise<SyncStatus
  * with the remote base (e.g. `main`) as of the last fetch. `null` otherwise.
  */
 export async function getDraftlineBaseStatus(remote: string): Promise<BaseStatus | null> {
-  const status = await invoke<DraftlineSyncStatusDto | null>("get_base_status", {
-    request: { workspace_path: requireWorkspacePath(), remote },
-  });
+  const status = await draftlineIpc.getBaseStatus(requireWorkspacePath(), remote);
   if (!status) return null;
   return { base: status.variation, ahead: status.ahead, behind: status.behind };
 }
@@ -467,12 +443,6 @@ export async function getDraftlineBaseStatus(remote: string): Promise<BaseStatus
  */
 export async function preflightDraftlineMergeBase(remote: string): Promise<DraftlineMergeIncomingReport> {
   return mergeIncomingReportToDto(await facade().preflightMergeBase(remote));
-}
-
-/** Merge the latest base into the current branch (clean merges only). */
-export async function mergeDraftlineFromBase(remote: string, label: string): Promise<string> {
-  const result = await facade().mergeBase(label, remote);
-  return result.merge.version.id;
 }
 
 export async function listDraftlineIncomingCommits(remote: string): Promise<IncomingCommit[]> {
@@ -565,9 +535,7 @@ export async function clearDraftlineStaleLock(): Promise<void> {
 
 /** Downloads content for files still holding a Git LFS pointer. True when anything was written. */
 export async function retryDraftlineContentDownload(): Promise<boolean> {
-  return invoke<boolean>("retry_content_download", {
-    request: { workspace_path: requireWorkspacePath() },
-  });
+  return draftlineIpc.retryContentDownload(requireWorkspacePath());
 }
 
 export async function discardDraftlineChanges(): Promise<void> {
@@ -618,41 +586,12 @@ export interface MoveProjectFolderResult {
 
 /** Moves the project folder to `to` (relative to the repository) as one save. */
 export async function moveDraftlineProjectFolder(to: string): Promise<MoveProjectFolderResult> {
-  return invoke<MoveProjectFolderResult>("move_project_folder", {
-    request: { workspace_path: requireWorkspacePath(), to },
-  });
+  return draftlineIpc.moveProjectFolder(requireWorkspacePath(), to);
 }
 
 export async function saveDraftlineVersion(label: string): Promise<string> {
   const version = await facade().save(label);
   return version.version.id;
-}
-
-const CUTREADY_STASH_SHELF = "cutready-stash";
-
-export async function shelveDraftlineChanges(): Promise<void> {
-  const f = facade();
-  const changes = await f.changes();
-  if (changes.files.length === 0) return;
-  await f.selectedShelve(changes.files.map((file) => file.path), CUTREADY_STASH_SHELF);
-}
-
-export async function hasDraftlineShelf(): Promise<boolean> {
-  const shelves = await facade().shelves();
-  return shelves.some((shelf) => shelf.id === CUTREADY_STASH_SHELF);
-}
-
-export async function popDraftlineShelf(): Promise<boolean> {
-  const workspacePath = requireWorkspacePath();
-  const f = facade();
-  const shelves = await f.shelves();
-  const shelf = shelves.find((candidate) => candidate.id === CUTREADY_STASH_SHELF);
-  if (!shelf) return false;
-  await f.applyShelf(shelf.id);
-  await invoke("delete_shelf", {
-    request: { workspace_path: workspacePath, shelf_id: shelf.id },
-  });
-  return true;
 }
 
 function refsByTargetVersion(refs: WorkspaceGraphRef[]): Map<string, WorkspaceGraphRef[]> {
@@ -694,6 +633,7 @@ function versionToEntry(version: Version): VersionEntry {
   return {
     id: version.id,
     message: version.label,
+    comment: version.comment ?? undefined,
     timestamp: new Date(version.time_seconds * 1000).toISOString(),
     summary: version.label,
   };
@@ -720,57 +660,6 @@ function remoteVariationToBranchInfo(variation: RemoteVariation): RemoteBranchIn
       ? new Date(variation.head_version.time_seconds * 1000).toISOString()
       : undefined,
   };
-}
-
-function variationCreateConflictMessage(preflight: VariationCreatePreflight): string {
-  if (preflight.remote_collision || preflight.remote_only_collision) {
-    const remote = preflight.remote ?? "remote";
-    const head = preflight.existing_remote_head?.label
-      ? ` Remote head: ${preflight.existing_remote_head.label}.`
-      : "";
-    const suggestion = preflight.suggested_alternative
-      ? ` Suggested name: ${preflight.suggested_alternative}.`
-      : "";
-    return `Branch "${preflight.variation}" already exists on ${remote}.${head}${suggestion}`;
-  }
-  if (preflight.local_collision) {
-    return `Branch "${preflight.variation}" already exists locally.`;
-  }
-  return `Branch "${preflight.variation}" cannot be created.`;
-}
-
-function variationCreatePreflightFromError(error: unknown): VariationCreatePreflight | null {
-  const value = typeof error === "string" ? parseJsonObject(error) : error;
-  if (!value || typeof value !== "object") return null;
-  const record = value as Record<string, unknown>;
-  const preflight = record.preflight ?? record.report;
-  if (isVariationCreatePreflight(preflight)) return preflight;
-  if (
-    (record.kind === "variation_create_preflight_failed" || record.code === "variation_create_preflight_failed")
-    && isVariationCreatePreflight(record.preflight)
-  ) {
-    return record.preflight;
-  }
-  return null;
-}
-
-function parseJsonObject(value: string): unknown {
-  try {
-    return JSON.parse(value);
-  } catch {
-    return null;
-  }
-}
-
-function isVariationCreatePreflight(value: unknown): value is VariationCreatePreflight {
-  if (!value || typeof value !== "object") return false;
-  const record = value as Record<string, unknown>;
-  return typeof record.from_version === "string"
-    && typeof record.variation === "string"
-    && typeof record.can_create === "boolean"
-    && typeof record.local_collision === "boolean"
-    && typeof record.remote_collision === "boolean"
-    && typeof record.remote_only_collision === "boolean";
 }
 
 function versionDiffToDiffEntries(diff: VersionDiff): DiffEntry[] {
@@ -833,7 +722,7 @@ function applyIncomingReportToDto(report: ApplyIncomingReport): DraftlineApplyIn
   };
 }
 
-function mergeIncomingReportToDto(report: MergeIncomingReport): DraftlineMergeIncomingReport {
+export function mergeIncomingReportToDto(report: MergeIncomingReport): DraftlineMergeIncomingReport {
   const viewModel = createMergeConflictViewModel(report);
   return {
     syncStatus: {
@@ -848,6 +737,7 @@ function mergeIncomingReportToDto(report: MergeIncomingReport): DraftlineMergeIn
     canMergeCleanly: report.can_merge_cleanly,
     changedWorkspace: report.changed_workspace,
     viewModel,
+    incoming: incomingVersions(report.sync_status.incoming),
   };
 }
 

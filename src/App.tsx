@@ -22,6 +22,7 @@ import { useVersioningStore } from "./stores/versioningStore";
 import { useSyncStore } from "./stores/syncStore";
 import { useToastStore } from "./stores/toastStore";
 import { useUpdateStore } from "./stores/updateStore";
+import { createCoalescedRefresh } from "./services/coalescedRefresh";
 
 function App() {
   useTheme();
@@ -79,38 +80,23 @@ function App() {
 
   useEffect(() => {
     let disposed = false;
-    let refreshing = false;
-    let rerun = false;
-
-    const refreshFromDraftlineEvent = async () => {
-      if (refreshing) {
-        rerun = true;
-        return;
-      }
-      refreshing = true;
-      try {
-        do {
-          rerun = false;
-          if (useAppStore.getState().currentProject) {
-            const versioning = useVersioningStore.getState();
-            const sync = useSyncStore.getState();
-            await Promise.all([
-              versioning.checkDirty(),
-              versioning.refreshChangedFiles(),
-              versioning.loadVersions(),
-              versioning.loadGraphData(),
-              versioning.loadTimelines(),
-              sync.refreshSyncStatus(),
-              sync.refreshIncomingCommits(),
-              versioning.checkProjectHealth({ probeContent: false }),
-              refreshOpenDocuments(),
-            ]);
-          }
-        } while (rerun && !disposed);
-      } finally {
-        refreshing = false;
-      }
-    };
+    const refresher = createCoalescedRefresh(async () => {
+      if (!useAppStore.getState().currentProject) return;
+      const versioning = useVersioningStore.getState();
+      const sync = useSyncStore.getState();
+      await Promise.all([
+        versioning.checkDirty(),
+        versioning.refreshChangedFiles(),
+        versioning.loadVersions(),
+        versioning.loadGraphData(),
+        versioning.loadTimelines(),
+        sync.refreshSyncStatus(),
+        sync.refreshIncomingCommits(),
+        versioning.checkProjectHealth({ probeContent: false }),
+        refreshOpenDocuments(),
+      ]);
+    });
+    const refreshFromDraftlineEvent = refresher.request;
 
     const stopWatchingDocuments = watchOpenDocuments();
     let unlisten: (() => void) | undefined;
@@ -142,6 +128,7 @@ function App() {
 
     return () => {
       disposed = true;
+      refresher.dispose();
       stopWatchingDocuments();
       unlisten?.();
       unlistenDeferred?.();

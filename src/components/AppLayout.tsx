@@ -3,6 +3,8 @@ import { useAppStore, type AppView } from "../stores/appStore";
 import { SIDEBAR_DEFAULT_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "../stores/sidebarLayout";
 import { useChatStore } from "../stores/chatStore";
 import { useVersioningStore } from "../stores/versioningStore";
+import { useChangeSummaryStore } from "../stores/changeSummaryStore";
+import { useVersioningLifecycle, openHistoryTab } from "../hooks/useVersioningLifecycle";
 import { useToastStore } from "../stores/toastStore";
 import { useSettings } from "../hooks/useSettings";
 import { useContributorIdentity } from "../hooks/useContributorIdentity";
@@ -11,7 +13,7 @@ import { RecordingPanel } from "./RecordingPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { Sidebar } from "./Sidebar";
 import { useExitChatFocusOnNavigate } from "../hooks/useExitChatFocusOnNavigate";
-import { isMediaView, panelOwner } from "../utils/navigation";
+import { isMediaView } from "../utils/navigation";
 import { StoryboardPanel } from "./StoryboardPanel";
 import { CompanionPane } from "./CompanionPane";
 import { StoryboardList } from "./StoryboardList";
@@ -20,13 +22,13 @@ import { ResizeHandle } from "./ResizeHandle";
 import { OutputPanel } from "./OutputPanel";
 import { CommandPalette } from "./CommandPalette";
 import { TitleBar } from "./TitleBar";
-import { SnapshotDialog } from "./SnapshotDialog";
+import { MergeNameHost } from "./versioning/MergeNameDialog";
+import { PreActionHost } from "./versioning/PreActionDialog";
 import { SendForReviewDialog } from "./SendForReviewDialog";
 import { AiApplyGateDialog } from "./AiApplyGateDialog";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { MergeConflictPanel } from "./MergeConflictPanel";
 import { ChatPanel } from "./ChatPanel";
-import { ChangesPanel } from "./ChangesPanel";
 import { FeedbackDialog } from "./FeedbackDialog";
 import { ProjectHealthBanner } from "./ProjectHealthBanner";
 import { AdoptFolderDialog } from "./AdoptFolderDialog";
@@ -51,6 +53,7 @@ import {
   Download,
   Terminal,
   Bookmark,
+  History,
   AlertCircle,
   UserRound,
   X,
@@ -101,7 +104,7 @@ export function AppLayout() {
   }, [view]);
 
   useEffect(() => {
-    if (view === "project" || view === "assets" || view === "narrations" || view === "changes") {
+    if (view === "project" || view === "assets" || view === "narrations") {
       lastWorkspaceViewRef.current = view;
     }
   }, [view]);
@@ -246,13 +249,23 @@ export function AppLayout() {
       },
       {
         id: "snapshot.quickSave",
-        title: "Save Snapshot",
-        category: "Snapshot",
+        title: "Save Version",
+        category: "Versions",
         keybinding: "Ctrl+S",
         icon: <Bookmark className="w-4 h-4" />,
         handler: () => {
           const { currentProject } = useAppStore.getState();
-          if (currentProject) useVersioningStore.getState().promptSnapshot();
+          if (currentProject) useChangeSummaryStore.getState().openForSave();
+        },
+      },
+      {
+        id: "versions.openHistory",
+        title: "Open History",
+        category: "Versions",
+        keybinding: "Ctrl+Shift+H",
+        icon: <History className="w-4 h-4" />,
+        handler: () => {
+          if (useAppStore.getState().currentProject) openHistoryTab();
         },
       },
       {
@@ -366,12 +379,14 @@ export function AppLayout() {
         e.preventDefault();
         toggleOutput();
       }
+      if (mod && e.shiftKey && (e.key === "H" || e.key === "h")) {
+        e.preventDefault();
+        if (useAppStore.getState().currentProject) openHistoryTab();
+        return;
+      }
       if (mod && (e.key === "S" || e.key === "s")) {
         e.preventDefault();
-        const { currentProject } = useAppStore.getState();
-        if (currentProject) {
-          useVersioningStore.getState().promptSnapshot();
-        }
+        if (useAppStore.getState().currentProject) useChangeSummaryStore.getState().openForSave();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -388,6 +403,7 @@ export function AppLayout() {
   ]);
 
   useApplyAccessibility();
+  useVersioningLifecycle();
 
   // Apply display settings as CSS variables
   const { settings: displaySettings, loaded: displaySettingsLoaded } = useSettings();
@@ -420,7 +436,7 @@ export function AppLayout() {
   }, [contentView, setView]);
   const outputPanelAvailable = contentView !== "home" && contentView !== "chat" && !projectSwitching;
   const outputPanelVisible = outputPanelAvailable && outputVisible;
-  const documentView = !projectSwitching && (contentView === "project" || contentView === "assets" || contentView === "narrations" || contentView === "changes");
+  const documentView = !projectSwitching && (contentView === "project" || contentView === "assets" || contentView === "narrations");
   const companionVisible = documentView && !isMerging && showSecondaryPanel;
 
   return (
@@ -525,7 +541,8 @@ export function AppLayout() {
         onExecute={handleExecuteCommand}
         recentCommands={recentCommands}
       />
-      <SnapshotDialog />
+      <PreActionHost />
+      <MergeNameHost />
       <SendForReviewDialog />
       <AiApplyGateDialog />
       <KeyboardShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
@@ -657,8 +674,6 @@ function NavPane({ contentView, showPanel, ...navProps }: NavPaneProps) {
     }
   }, [setSidebarWidth, toggleSidebar]);
 
-  const panel = showPanel && panelOwner(contentView) === "changes" ? <ChangesPanel /> : null;
-
   return (
     <>
       <Sidebar
@@ -666,7 +681,6 @@ function NavPane({ contentView, showPanel, ...navProps }: NavPaneProps) {
         panelView={contentView}
         expanded={sidebarVisible}
         documents={showPanel && hasProject ? <StoryboardList /> : null}
-        panel={panel}
         width={sidebarWidth}
         resizing={resizing}
       />
