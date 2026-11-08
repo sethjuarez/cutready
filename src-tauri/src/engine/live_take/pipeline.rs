@@ -32,7 +32,9 @@ use serde_json::json;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-pub const TAKE_REPORT_SCHEMA_V1: &str = "cutready.live-take.v1";
+/// v2 renamed the self-consistency check from `audit` to `renderConsistency`;
+/// the independent audit lives in `audit.json` (`super::audit`).
+pub const TAKE_REPORT_SCHEMA_V2: &str = "cutready.live-take.v2";
 const FPS: Fps = Fps::FPS_25;
 const MARKER_RUN_THRESHOLD: f32 = 0.5;
 const MARKER_EXCLUDE_THRESHOLD: f32 = 0.02;
@@ -75,7 +77,8 @@ pub struct LiveTakeOutcome {
     pub dir: PathBuf,
     pub mp4: PathBuf,
     pub report: PathBuf,
-    pub audit: AuditReport,
+    /// Self-consistency of the render (same detector as the planner).
+    pub render_consistency: AuditReport,
     pub stages: Vec<StageTiming>,
     /// Earlier takes of this run that were rejected, with the reason.
     pub rejected: Vec<(PathBuf, String)>,
@@ -515,11 +518,11 @@ async fn analyze_and_render(
     let (observed_words, word_notes) =
         observe_words(&pcm, &words, &plan.words, &final_audio, &word_indices);
     let report = audit(FPS, &audit_cues, &observed_words, &observed_actions, None);
-    stages.mark("audit");
+    stages.mark("renderConsistency");
 
     let report_path = dir.join("take.json");
     let take_json = json!({
-        "schema": TAKE_REPORT_SCHEMA_V1,
+        "schema": TAKE_REPORT_SCHEMA_V2,
         "script": script,
         "scriptPath": opts.script_path,
         "narration": {
@@ -555,7 +558,7 @@ async fn analyze_and_render(
             "words": observed_words,
             "wordSearch": word_notes,
         },
-        "audit": report,
+        "renderConsistency": report,
         "stages": stages.0.clone(),
     });
     std::fs::write(&report_path, serde_json::to_vec_pretty(&take_json)?)?;
@@ -563,7 +566,7 @@ async fn analyze_and_render(
         dir,
         mp4,
         report: report_path,
-        audit: report,
+        render_consistency: report,
         stages: std::mem::take(&mut stages.0),
         rejected: Vec::new(),
     })
