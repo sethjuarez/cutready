@@ -19,6 +19,7 @@ import * as path from "path";
 import { chromium } from "playwright";
 
 export const MARKER_COLOR = "#ff00ff";
+export const MARKER_ID = "__cutready_calibration_marker";
 
 const now = () => process.hrtime.bigint();
 const relMs = (t0, t) => Number(t - t0) / 1e6;
@@ -36,8 +37,8 @@ export function markerCss(color, stripHeight) {
 
 async function setMarker(page, visible, color, stripHeight) {
   return page.evaluate(
-    async ({ visible, css }) => {
-      const id = "__cutready_calibration_marker";
+    async ({ visible, css, markerId }) => {
+      const id = markerId;
       let el = document.getElementById(id);
       if (visible) {
         if (!el) {
@@ -52,8 +53,103 @@ async function setMarker(page, visible, color, stripHeight) {
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
       return performance.now();
     },
-    { visible, css: markerCss(color, stripHeight) },
+    { visible, css: markerCss(color, stripHeight), markerId: MARKER_ID },
   );
+}
+
+export const WITNESS_BINDING = "__cutreadyWitness";
+/** Effects are only reported this long after the document's last input. */
+export const WITNESS_EFFECT_WINDOW_MS = 1500;
+
+/**
+ * Page-side semantic witness, installed in every document before page code
+ * runs. It reports input events (pointerdown, keydown, wheel) and the first
+ * effect per animation frame after an input (DOM mutation, input value,
+ * scroll), plus each new document's first frame. Every event carries
+ * page-clock times (`performance.timeOrigin + …`, epoch ms): `at` when it
+ * happened and `frame` for the next animation frame, the earliest frame
+ * that can paint it. The audit maps these through clock probes, so this is a
+ * non-pixel clock for "when did the page change".
+ */
+export function witnessInit({ binding, markerId, effectWindowMs }) {
+  if (window.__cutreadyWitnessInstalled) return;
+  window.__cutreadyWitnessInstalled = true;
+  const doc = `${performance.timeOrigin.toFixed(3)}-${Math.random().toString(36).slice(2, 8)}`;
+  const send = (ev) => {
+    try {
+      window[binding]?.(ev);
+    } catch {}
+  };
+  const boxOf = (node) => {
+    const el = node && node.nodeType === 1 ? node : node?.parentElement;
+    if (!el || el === document.documentElement || el === document.body) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.x, y: r.y, width: r.width, height: r.height };
+  };
+  let lastInput = -Infinity;
+  const pending = new Set();
+  const report = (kind, node, at) => {
+    if (kind.startsWith("effect:")) {
+      if (at - lastInput > effectWindowMs || pending.has(kind)) return;
+      pending.add(kind);
+    }
+    const box = boxOf(node);
+    requestAnimationFrame((ts) => {
+      pending.delete(kind);
+      send({ doc, kind, at, frame: performance.timeOrigin + ts, box, url: location.href });
+    });
+  };
+  const nowEpoch = () => performance.timeOrigin + performance.now();
+  requestAnimationFrame((ts) =>
+    send({ doc, kind: "document", at: performance.timeOrigin, frame: performance.timeOrigin + ts, box: null, url: location.href }),
+  );
+  for (const type of ["pointerdown", "keydown", "wheel"]) {
+    addEventListener(
+      type,
+      (e) => {
+        lastInput = nowEpoch();
+        report(`input:${type}`, e.target, performance.timeOrigin + e.timeStamp);
+      },
+      { capture: true, passive: true },
+    );
+  }
+  addEventListener("input", (e) => report("effect:input", e.target, nowEpoch()), { capture: true });
+  addEventListener("scroll", (e) => report("effect:scroll", e.target === document ? null : e.target, nowEpoch()), {
+    capture: true,
+    passive: true,
+  });
+  const isMarker = (n) => n?.id === markerId;
+  const observer = new MutationObserver((records) => {
+    const real = records.find(
+      (r) =>
+        !isMarker(r.target) &&
+        !(r.type === "childList" && [...r.addedNodes, ...r.removedNodes].every(isMarker)),
+    );
+    if (real) report("effect:mutation", real.target, nowEpoch());
+  });
+  const start = () =>
+    observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
+  if (document.documentElement) start();
+  else addEventListener("DOMContentLoaded", start, { once: true });
+}
+
+/**
+ * Host↔page clock probe: the minimum-roundtrip of `samples` evaluations.
+ * `offset_ms` maps page epoch ms to host ms (relative to t0).
+ */
+export async function clockProbe(page, t0, samples = 3) {
+  let best = null;
+  for (let i = 0; i < samples; i++) {
+    const a = now();
+    const p = await page.evaluate(() => [performance.timeOrigin + performance.now(), performance.timeOrigin]);
+    const b = now();
+    const rtt_ms = Number(b - a) / 1e6;
+    const host_ms = relMs(t0, a) + rtt_ms / 2;
+    if (!best || rtt_ms < best.rtt_ms) {
+      best = { host_ms, page_ms: p[0], time_origin: p[1], rtt_ms, offset_ms: host_ms - p[0] };
+    }
+  }
+  return best;
 }
 
 /** Flash the calibration overlay for ~holdMs and log host stamps. */
@@ -264,6 +360,18 @@ export async function runTake(params) {
       recordVideo: { dir: outDir, size: recordViewport },
     });
     const context_created_at = now();
+    const witnessEvents = [];
+    const witnessOn = params.witness !== false;
+    if (witnessOn) {
+      await context.exposeBinding(WITNESS_BINDING, (_source, ev) => {
+        witnessEvents.push({ ...ev, received_at: now() });
+      });
+      await context.addInitScript(witnessInit, {
+        binding: WITNESS_BINDING,
+        markerId: MARKER_ID,
+        effectWindowMs: WITNESS_EFFECT_WINDOW_MS,
+      });
+    }
     const page = await context.newPage();
     const page_created_at = now();
     const net = trackRequests(page);
@@ -290,8 +398,10 @@ export async function runTake(params) {
         // for most of a second; a stall over a marker hides the action. Let the
         // network go quiet before the pre-marker.
         entry.pre_quiet_ms = await net.quiet(step.preQuietMs ?? 300, step.preQuietMaxMs ?? 3000);
+        const clockPre = witnessOn ? await clockProbe(page, t0) : null;
         log.markers.push(await flashMarker(page, t0, `pre:${entry.label}`, markerOpts));
         await sleep(markerOpts.settleMs);
+        const firstEvent = witnessEvents.length;
         const d = await dispatch(page, step, prepared, stepTimeoutMs);
         entry.selector = d.selector;
         if (d.selector_attempts) entry.selector_attempts = d.selector_attempts;
@@ -300,11 +410,28 @@ export async function runTake(params) {
         entry.input_effect_ms = relMs(t0, d.input_effect_at);
         entry.postcondition = await waitPostcondition(page, step.expect, stepTimeoutMs);
         entry.postcondition_ms = relMs(t0, now());
+        const clockPost = witnessOn ? await clockProbe(page, t0) : null;
         const observe = step.observe || step.expect?.selector;
         const observe_box = await boxOf(page, observe);
         if (observe_box) entry.observe_box = observe_box;
         await sleep(markerOpts.settleMs);
         log.markers.push(await flashMarker(page, t0, `post:${entry.label}`, markerOpts));
+        if (witnessOn) {
+          // Binding calls arrive asynchronously; by the end of the post
+          // marker every event before it has been delivered. Keep effects
+          // up to the post marker: a route change satisfies its URL
+          // postcondition before the new page renders.
+          const postMarker = log.markers[log.markers.length - 1];
+          const untilPage = postMarker.on_requested_ms - clockPost.offset_ms;
+          entry.witness = {
+            clock_pre: clockPre,
+            clock_post: clockPost,
+            events: witnessEvents
+              .slice(firstEvent)
+              .filter((ev) => ev.at <= untilPage)
+              .map(({ received_at, ...ev }) => ({ ...ev, received_ms: relMs(t0, received_at) })),
+          };
+        }
       } catch (e) {
         entry.status = "failed";
         entry.error = e.message.split("\n")[0];
