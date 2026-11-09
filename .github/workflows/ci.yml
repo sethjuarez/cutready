@@ -56,12 +56,18 @@ jobs:
 
       - run: npm run check:frontend
 
+      # Playwright 1.58's installer hangs extracting downloads on Node 26, so
+      # the sidecar steps run on Node 22.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - run: npm ci --prefix playwright-sidecar
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
 
       # take.test.mjs drives a real page to check the DOM witness. It uses the
-      # runner's Chrome; installing Playwright's Chromium hangs on extraction.
+      # runner's Chrome, so only Playwright's ffmpeg (for video) is installed.
       - run: npx playwright install ffmpeg
         working-directory: playwright-sidecar
         timeout-minutes: 5
