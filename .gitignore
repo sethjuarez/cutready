@@ -53,3 +53,6 @@ skills-lock.json
 
 # cutready-cli sidecar staged by release.yml
 src-tauri/binaries/
+
+# Video calibration spike output
+.spike-out/

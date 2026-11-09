@@ -12,7 +12,9 @@
  *   Event:    { "event": string, "data": object }
  *
  * Methods: ping, browser.prepare, browser.startObserving, browser.stopObserving,
- *          browser.close, browser.screenshot
+ *          browser.close, browser.screenshot,
+ *          browser.take (fresh recordVideo context + timed step log, see lib/take.js),
+ *          tts.synthesize (Azure Speech SDK audio + WordBoundary events, see lib/tts.js)
  * Events:  action_captured, browser_disconnected
  */
 
@@ -21,6 +23,8 @@ import * as readline from "readline";
 import * as path from "path";
 import * as fs from "fs";
 import { execSync } from "child_process";
+import { runTake } from "./lib/take.js";
+import { synthesize } from "./lib/tts.js";
 
 let browser = null;
 let context = null;
@@ -83,6 +87,12 @@ rl.on("line", async (line) => {
         break;
       case "browser.screenshot":
         await handleScreenshot(id, params || {});
+        break;
+      case "browser.take":
+        sendResponse(id, await runTake(params || {}));
+        break;
+      case "tts.synthesize":
+        sendResponse(id, await synthesize(params || {}));
         break;
       default:
         sendError(id, `Unknown method: ${method}`);

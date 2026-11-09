@@ -4,9 +4,14 @@
   "private": true,
   "type": "module",
   "main": "index.js",
+  "scripts": {
+    "test": "node --test test/",
+    "spike:calibrate": "node spike/calibrate.mjs"
+  },
   "dependencies": {
     "@elucim/cli": "0.25.0",
     "@elucim/dsl": "0.25.0",
+    "microsoft-cognitiveservices-speech-sdk": "^1.53.0",
     "playwright": "^1.49.0"
   }
 }

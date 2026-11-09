@@ -55,6 +55,12 @@ jobs:
 
       - run: npm run check:frontend
 
+      - run: npm ci --prefix playwright-sidecar
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+
+      - run: npm run check:sidecar
+
   rust:
     name: Rust (Linux)
     needs: changes
