@@ -3,7 +3,9 @@
 //! It reads only what the take recorded and the final media; nothing from
 //! the planner's detections is used.
 
-use super::align::{after_pause, align, content_issues, cue_token, ContentIssue, WordProblem};
+use super::align::{
+    after_pause, align, content_issues, cue_end_token, cue_token, ContentIssue, WordProblem,
+};
 use super::media::{audio_offset_ms, gray_frames, rgb_frames, wav_16k, AUDIT_SIZE};
 use super::sheet::{write_sheet, SheetFrame, SheetRow, THUMB};
 use super::stt::{transcribe, Transcript};
@@ -200,7 +202,7 @@ impl Timer {
 fn problem_name(p: WordProblem) -> &'static str {
     match p {
         WordProblem::NotHeard => "cueWordNotHeard",
-        WordProblem::MergedIntoPrevious => "cueWordMerged",
+        WordProblem::MergedIntoPrevious | WordProblem::MergedIntoNext => "cueWordMerged",
         WordProblem::WeakContext => "cueWordWeakContext",
     }
 }
@@ -249,7 +251,11 @@ fn word_evidence(
     let Some(h) = heard else {
         return ev;
     };
-    let j = match cue_token(&h.alignment, word_index) {
+    let token = match cue.anchor {
+        CueAnchor::WordStart => cue_token(&h.alignment, word_index),
+        CueAnchor::WordEnd => cue_end_token(&h.alignment, word_index),
+    };
+    let j = match token {
         Ok(j) => j,
         Err(p) => {
             ev.problem = Some(problem_name(p).into());

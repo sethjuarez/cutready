@@ -59,6 +59,10 @@ jobs:
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
 
+      # take.test.mjs drives a real page to check the DOM witness.
+      - run: npx playwright install --with-deps chromium
+        working-directory: playwright-sidecar
+
       - run: npm run check:sidecar
 
   rust:

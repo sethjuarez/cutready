@@ -22,6 +22,8 @@ fn recognizer_merge_maps_both_words() {
     assert_eq!(al.wer, 0.0);
     assert_eq!(cue_token(&al, 2), Ok(2));
     assert_eq!(cue_token(&al, 3), Err(WordProblem::MergedIntoPrevious));
+    assert_eq!(cue_end_token(&al, 2), Err(WordProblem::MergedIntoNext));
+    assert_eq!(cue_end_token(&al, 3), Ok(2));
 }
 
 #[test]
@@ -30,6 +32,8 @@ fn recognizer_split_maps_to_first_token() {
     let al = align(&r, &s("use play wright today"));
     assert_eq!(al.refs[1], RefMatch::Split { hyp: 1 });
     assert_eq!(al.refs[2], RefMatch::Exact { hyp: 3 });
+    assert_eq!(cue_token(&al, 1), Ok(1));
+    assert_eq!(cue_end_token(&al, 1), Ok(2));
 }
 
 #[test]

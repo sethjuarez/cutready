@@ -244,6 +244,8 @@ pub enum WordProblem {
     NotHeard,
     /// Recognized merged into the previous word, so its own start is unknown.
     MergedIntoPrevious,
+    /// Recognized merged into the next word, so its own end is unknown.
+    MergedIntoNext,
     /// A neighbouring narration word wasn't heard, so the match may have
     /// landed on the wrong occurrence.
     WeakContext,
@@ -258,6 +260,24 @@ pub fn cue_token(al: &Alignment, ref_index: usize) -> Result<usize, WordProblem>
         RefMatch::MergedSecond { .. } => return Err(WordProblem::MergedIntoPrevious),
         m => m.start_token().ok_or(WordProblem::NotHeard)?,
     };
+    with_context(al, ref_index, token)
+}
+
+/// The transcript token that ends `ref_index`, with the same trust rules as
+/// [`cue_token`]. A split word ends with its second token; a word merged
+/// with the previous one ends where the merged token ends.
+pub fn cue_end_token(al: &Alignment, ref_index: usize) -> Result<usize, WordProblem> {
+    let here = al.refs.get(ref_index).copied().unwrap_or(RefMatch::Missing);
+    let token = match here {
+        RefMatch::Exact { hyp } | RefMatch::Fuzzy { hyp } | RefMatch::MergedSecond { hyp } => hyp,
+        RefMatch::Split { hyp } => hyp + 1,
+        RefMatch::MergedFirst { .. } => return Err(WordProblem::MergedIntoNext),
+        _ => return Err(WordProblem::NotHeard),
+    };
+    with_context(al, ref_index, token)
+}
+
+fn with_context(al: &Alignment, ref_index: usize, token: usize) -> Result<usize, WordProblem> {
     let neighbour = |range: &mut dyn Iterator<Item = usize>| {
         range
             .map(|k| al.refs[k])
