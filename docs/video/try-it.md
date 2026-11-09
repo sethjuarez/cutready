@@ -15,7 +15,7 @@ $env:SPEECH_TOKEN = az account get-access-token --resource https://cognitiveserv
   --subscription sethjuarez-devrel --query accessToken -o tsv
 ```
 
-You also need `ffmpeg` and `ffprobe`, either on `PATH` or pointed to by `CUTREADY_FFMPEG` and `CUTREADY_FFPROBE`. The token expires after about an hour. TTS results are cached, so reruns of the same narration don't need a token. The audit's transcription does need one, unless you pass `--no-stt`.
+You also need `ffmpeg` and `ffprobe`, either on `PATH` or pointed to by `CUTREADY_FFMPEG` and `CUTREADY_FFPROBE` (the calibration spike needs `PATH`). The token expires after about an hour. TTS results are cached, so reruns of the same narration don't need a token. The audit's transcription does need one, unless you pass `--no-stt`.
 
 ## Live narrated take
 
@@ -56,12 +56,15 @@ Open `contact-sheet.png` to check what was on screen at each cue. `docs/video/au
 
 ## Calibration spike
 
+The spike's media helpers call `ffmpeg` and `ffprobe` directly, so both must be on `PATH`; `CUTREADY_FFMPEG` and `CUTREADY_FFPROBE` don't apply here.
+
 ```powershell
-cd playwright-sidecar
+Push-Location playwright-sidecar
 node spike/calibrate.mjs --repeat 3 --headful
+Pop-Location
 ```
 
-Output goes to `playwright-sidecar/.spike-out/`. See `docs/video/calibration-spike.md`.
+Output goes to `.spike-out/calibration/` at the repository root, including `results.json`. See `docs/video/calibration-spike.md`.
 
 ## Elucim frame export
 
@@ -81,6 +84,7 @@ This writes `frame-000000.png` and the frames after it, plus a `frames.json` man
 You can also call the Elucim CLI directly. Theme tokens such as `$accent` are only resolved by the sidecar renderer.
 
 ```powershell
-cd playwright-sidecar
+Push-Location playwright-sidecar
 npx elucim export-frames ../src-tauri/examples/elucim/hello.json --out-dir ../.elucim-out/cli --fps 30 --count 5 --json
+Pop-Location
 ```
