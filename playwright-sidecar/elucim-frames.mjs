@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 // Renders an Elucim visual to a PNG frame sequence plus a `frames.json`
 // manifest for video export. Reads a JSON payload on stdin:
-//   { visualPath, outputDir, theme?: "light" | "dark", maxFrames?, scale? }
+//   { document? | visualPath, outputDir, theme?: "light" | "dark", fps?, maxFrames?, scale? }
+// `document` (already normalized to version 2.0) wins over `visualPath`.
 // and prints { manifestPath, frameCount, sourceFps, totalFrames } on stdout.
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 import { exportFrames, planFrameExport } from "@elucim/cli";
+import { themeToVars } from "@elucim/dsl";
 
 const CUTREADY_LIGHT = {
   foreground: "#2c2925",
@@ -53,18 +55,43 @@ function readStdin() {
   });
 }
 
-// The headless renderer has no theme input, so bake CutReady's palette into
-// `$token` paints before rendering.
-export function applyTheme(value, theme) {
-  if (typeof value === "string") {
-    const match = /^\$([\w-]+)$/.exec(value.trim());
-    return match && theme[match[1]] ? theme[match[1]] : value;
+function resolveThemeString(value, theme, vars, themeName) {
+  const token = /^\$([\w-]+)$/.exec(value.trim());
+  if (token) return theme[token[1]] ?? value;
+  let resolved = value;
+  for (let pass = 0; pass < 4 && resolved.includes("var("); pass += 1) {
+    resolved = resolved.replace(/var\(\s*(--[\w-]+)\s*(?:,\s*([^()]*))?\)/g, (match, name, fallback) => (
+      vars[name] ?? (fallback?.trim() || match)
+    ));
   }
-  if (Array.isArray(value)) return value.map((item) => applyTheme(item, theme));
+  return resolved.replace(/light-dark\(\s*([^,()]+?)\s*,\s*([^()]+?)\s*\)/g, themeName === "dark" ? "$2" : "$1");
+}
+
+// The headless renderer has no theme input, so bake CutReady's palette into
+// `$token`, `var(--…)` and `light-dark()` paints before rendering.
+export function applyTheme(value, theme, themeName = "light", vars = themeToVars(theme)) {
+  if (typeof value === "string") return resolveThemeString(value, theme, vars, themeName);
+  if (Array.isArray(value)) return value.map((item) => applyTheme(item, theme, themeName, vars));
   if (value && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, applyTheme(item, theme)]));
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, applyTheme(item, theme, themeName, vars)]),
+    );
   }
   return value;
+}
+
+// Video frames have no page behind them, so a missing or transparent scene
+// background would encode as black; paint the theme background instead.
+export function prepareDocument(raw, theme, themeName, fallbackFps) {
+  if (!raw || typeof raw !== "object" || !raw.scene || typeof raw.scene !== "object") {
+    throw new Error("Elucim visual must be a version 2.0 document with a `scene`; normalize legacy visuals first");
+  }
+  const document = applyTheme(raw, theme, themeName);
+  const background = typeof document.scene.background === "string" ? document.scene.background.trim() : "";
+  const scene = { ...document.scene };
+  if (!background || background === "transparent" || background === "none") scene.background = theme.background;
+  if (!(Number(scene.fps) > 0) && Number(fallbackFps) > 0) scene.fps = Number(fallbackFps);
+  return { ...document, scene };
 }
 
 // Evenly samples `count` frame indices from 0..count-1, keeping both ends.
@@ -82,10 +109,14 @@ export function frameSamples(count, maxFrames) {
 
 export async function renderFrameManifest(payload) {
   const { visualPath, outputDir } = payload;
-  if (!visualPath || !outputDir) throw new Error("visualPath and outputDir are required");
+  if ((!visualPath && !payload.document) || !outputDir) {
+    throw new Error("outputDir and either document or visualPath are required");
+  }
 
-  const theme = payload.theme === "dark" ? CUTREADY_DARK : CUTREADY_LIGHT;
-  const document = applyTheme(JSON.parse(await readFile(visualPath, "utf8")), theme);
+  const themeName = payload.theme === "dark" ? "dark" : "light";
+  const theme = themeName === "dark" ? CUTREADY_DARK : CUTREADY_LIGHT;
+  const raw = payload.document ?? JSON.parse(await readFile(visualPath, "utf8"));
+  const document = prepareDocument(raw, theme, themeName, payload.fps);
   // Render at the document's own rate; the plan covers frames 0..duration, so
   // the last sample is the timeline's final state.
   const plan = planFrameExport(document);

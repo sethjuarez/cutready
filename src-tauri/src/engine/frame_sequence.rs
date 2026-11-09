@@ -52,6 +52,29 @@ fn minimum_frame_seconds(fps: u32) -> f64 {
     1.0 / f64::from(fps)
 }
 
+/// Merge gesture entries shorter than one output frame into their neighbours
+/// so every shown frame lasts at least `minimum` seconds while the gesture
+/// keeps its authored total. A merged group shows its latest frame, so a
+/// zero-duration entry is superseded rather than stretched.
+fn coalesce_gesture(entries: &[FrameManifestEntry], minimum: f64) -> Vec<PlannedFrame> {
+    let mut steps: Vec<PlannedFrame> = Vec::new();
+    for entry in entries {
+        let seconds = entry.duration_ms.max(0) as f64 / 1000.0;
+        match steps.last_mut() {
+            Some(last) if last.duration_seconds < minimum => {
+                last.path = entry.path.clone();
+                last.duration_seconds += seconds;
+            }
+            _ => steps.push(PlannedFrame {
+                path: entry.path.clone(),
+                duration_seconds: seconds,
+            }),
+        }
+    }
+    steps.retain(|step| step.duration_seconds > 0.0);
+    steps
+}
+
 /// Fit an Elucim frame manifest into a row of `row_duration_seconds`.
 ///
 /// The terminal entry's authored duration is ignored because it is a delta to a
@@ -93,30 +116,25 @@ pub fn plan_frame_sequence(
         ),
     }
 
-    let minimum = minimum_frame_seconds(fps);
-    let authored: Vec<f64> = manifest[..last_index]
-        .iter()
-        .map(|entry| (entry.duration_ms.max(0) as f64 / 1000.0).max(minimum))
-        .collect();
-    let gesture_seconds: f64 = authored.iter().sum();
+    let steps = coalesce_gesture(&manifest[..last_index], minimum_frame_seconds(fps));
+    let gesture_seconds: f64 = steps.iter().map(|step| step.duration_seconds).sum();
 
     if gesture_seconds > row_duration_seconds {
         let mut frames = Vec::new();
         let mut spent = 0.0;
-        for (entry, duration) in manifest.iter().zip(authored.iter()) {
+        for step in &steps {
             if spent >= row_duration_seconds {
                 break;
             }
-            let remaining = row_duration_seconds - spent;
-            let shown = duration.min(remaining);
+            let shown = step.duration_seconds.min(row_duration_seconds - spent);
             frames.push(PlannedFrame {
-                path: entry.path.clone(),
+                path: step.path.clone(),
                 duration_seconds: shown,
             });
             spent += shown;
         }
 
-        let dropped_frames = manifest.len() - frames.len();
+        let dropped_frames = steps.len() + 1 - frames.len();
         return Ok(FrameSequencePlan {
             frames,
             total_seconds: row_duration_seconds,
@@ -128,14 +146,7 @@ pub fn plan_frame_sequence(
     }
 
     let hold_seconds = row_duration_seconds - gesture_seconds;
-    let mut frames: Vec<PlannedFrame> = manifest[..last_index]
-        .iter()
-        .zip(authored.iter())
-        .map(|(entry, duration)| PlannedFrame {
-            path: entry.path.clone(),
-            duration_seconds: *duration,
-        })
-        .collect();
+    let mut frames = steps;
     frames.push(PlannedFrame {
         path: manifest[last_index].path.clone(),
         duration_seconds: hold_seconds,
@@ -276,11 +287,32 @@ mod tests {
     }
 
     #[test]
-    fn interior_zero_duration_frame_still_gets_shown() {
+    fn interior_zero_duration_frame_is_superseded_without_adding_time() {
         let plan = plan_frame_sequence(&manifest(&[500, 0, 500, 0]), 3.0, 60).unwrap();
 
-        assert_eq!(plan.frames.len(), 4);
-        assert_eq!(plan.frames[1].duration_seconds, 1.0 / 60.0);
+        assert_eq!(plan.frames.len(), 3);
+        assert_eq!(plan.frames[1].path, PathBuf::from("frame-002.png"));
+        assert_eq!(plan.frames[1].duration_seconds, 0.5);
+        assert_eq!(plan.fit, FrameSequenceFit::Held { hold_seconds: 2.0 });
+    }
+
+    #[test]
+    fn sub_frame_samples_coalesce_instead_of_stretching_the_gesture() {
+        // 120fps authored gesture (8ms steps) played into a 30fps export.
+        let mut durations = vec![8; 120];
+        durations.push(0);
+        let plan = plan_frame_sequence(&manifest(&durations), 2.0, 30).unwrap();
+
+        let gesture: f64 = plan.frames[..plan.frames.len() - 1]
+            .iter()
+            .map(|frame| frame.duration_seconds)
+            .sum();
+        assert!((gesture - 0.96).abs() < 1e-9, "gesture took {gesture}s");
+        assert!(plan.frames[..plan.frames.len() - 1]
+            .iter()
+            .all(|frame| frame.duration_seconds >= 1.0 / 30.0 - 1e-9));
+        assert_eq!(plan.frames.len(), 25);
+        assert!(matches!(plan.fit, FrameSequenceFit::Held { hold_seconds } if (hold_seconds - 1.04).abs() < 1e-9));
     }
 
     #[test]

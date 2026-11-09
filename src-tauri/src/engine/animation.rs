@@ -54,7 +54,17 @@ pub fn render_visual_frame_manifest(
             sidecar_dir.display()
         );
     }
+    let raw: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(&visual_path)
+            .with_context(|| format!("Failed to read Elucim visual `{visual_relative_path}`"))?,
+    )
+    .with_context(|| format!("Elucim visual `{visual_relative_path}` is not valid JSON"))?;
+    // Legacy `{version: "1.0", root}` visuals are migrated to 2.0 here; the
+    // sidecar renderer only understands `scene` + `elements` documents.
+    let document = cutready_core::visual_document::normalize_visual_to_v2(&raw)
+        .map_err(|error| anyhow::anyhow!("Invalid Elucim visual `{visual_relative_path}`: {error}"))?;
     let payload = json!({
+        "document": document,
         "visualPath": visual_path,
         "outputDir": output_dir,
         "fps": fps,
@@ -246,5 +256,59 @@ mod tests {
             serde_json::from_slice(&std::fs::read(&manifest.manifest_path).unwrap()).unwrap();
         assert_eq!(manifest_json["frames"].as_array().unwrap().len(), 4);
         assert_eq!(manifest_json["frames"][3]["terminal"], true);
+    }
+
+    #[test]
+    fn renders_legacy_visual_with_theme_background() {
+        if !elucim_renderer_available() {
+            eprintln!("{ELUCIM_RENDERER_SKIP_MESSAGE}");
+            return;
+        }
+        let project = tempfile::tempdir().unwrap();
+        let visuals_dir = project.path().join(".cutready").join("visuals");
+        std::fs::create_dir_all(&visuals_dir).unwrap();
+        // Legacy 1.0 shape with no background: must be migrated, not crash,
+        // and must not encode a transparent (black) backdrop.
+        std::fs::write(
+            visuals_dir.join("legacy.json"),
+            serde_json::to_vec_pretty(&json!({
+                "version": "1.0",
+                "root": {
+                    "type": "scene",
+                    "width": 160,
+                    "height": 90,
+                    "durationInFrames": 30,
+                    "children": [{
+                        "type": "rect",
+                        "id": "panel",
+                        "x": 0,
+                        "y": 0,
+                        "width": 80,
+                        "height": 45,
+                        "fill": "light-dark(#ff0000, #00ff00)"
+                    }]
+                }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let output_dir = project.path().join("frames");
+        let manifest = render_visual_frame_manifest(
+            project.path(),
+            ".cutready/visuals/legacy.json",
+            &output_dir,
+            30,
+        )
+        .unwrap();
+
+        assert!(manifest.frame_count >= 1);
+        let frame = ImageReader::open(output_dir.join("frame-000000.png"))
+            .unwrap()
+            .decode()
+            .unwrap()
+            .to_rgba8();
+        assert_eq!(frame.get_pixel(8, 8).0, [255, 0, 0, 255]);
+        assert_eq!(frame.get_pixel(240, 140).0, [251, 250, 248, 255]);
     }
 }

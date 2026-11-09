@@ -39,13 +39,16 @@ function validateIntentEntry(entry: Record<string, unknown>, label: string, item
   const requireString = (field: string) => (
     typeof entry[field] === "string" && entry[field].trim() ? null : `${prefix} needs "${field}".`
   );
+  const isU32 = (value: unknown) => (
+    typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 4294967295
+  );
   const requireNumber = (field: string) => (
-    typeof entry[field] === "number" && Number.isFinite(entry[field]) ? null : `${prefix} needs numeric "${field}".`
+    isU32(entry[field]) ? null : `${prefix} needs "${field}" as a whole number of milliseconds (0 or more).`
   );
   const optionalNumber = (field: string) => (
-    entry[field] == null || (typeof entry[field] === "number" && Number.isFinite(entry[field]))
+    entry[field] == null || isU32(entry[field])
       ? null
-      : `${prefix} needs numeric "${field}".`
+      : `${prefix} needs "${field}" as a whole number of milliseconds (0 or more).`
   );
   const optionalBoolean = (field: string) => (
     entry[field] == null || typeof entry[field] === "boolean" ? null : `${prefix} needs boolean "${field}".`
@@ -152,15 +155,16 @@ function IntentTextarea<T extends { kind: string }>({
   const serializedValue = formatIntentJson(value);
   const [localValue, setLocalValue] = useState(serializedValue);
   const [error, setError] = useState<string | null>(null);
-  const [focused, setFocused] = useState(false);
+  const focused = useRef(false);
   const lastCommittedValue = useRef(serializedValue);
 
+  // Resync only when the stored value changes; leaving the field must not wipe an invalid draft or its error.
   useEffect(() => {
     lastCommittedValue.current = serializedValue;
-    if (focused) return;
+    if (focused.current) return;
     setLocalValue(serializedValue);
     setError(null);
-  }, [focused, serializedValue]);
+  }, [serializedValue]);
 
   const commit = () => {
     if (localValue === lastCommittedValue.current) {
@@ -189,9 +193,9 @@ function IntentTextarea<T extends { kind: string }>({
           setLocalValue(event.target.value);
           if (error) setError(null);
         }}
-        onFocus={() => setFocused(true)}
+        onFocus={() => { focused.current = true; }}
         onBlur={() => {
-          setFocused(false);
+          focused.current = false;
           commit();
         }}
         className="w-full resize-y rounded-md border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-inset))]/70 px-2 py-1 font-mono text-[11px] leading-4 text-[rgb(var(--color-text))] outline-none transition-colors focus:border-[rgb(var(--color-accent))]/45 focus:ring-1 focus:ring-[rgb(var(--color-accent))]/20 read-only:cursor-default"
