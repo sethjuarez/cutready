@@ -60,11 +60,15 @@ jobs:
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
 
-      # take.test.mjs drives a real page to check the DOM witness.
-      - run: npx playwright install --with-deps chromium
+      # take.test.mjs drives a real page to check the DOM witness. It uses the
+      # runner's Chrome; installing Playwright's Chromium hangs on extraction.
+      - run: npx playwright install ffmpeg
         working-directory: playwright-sidecar
+        timeout-minutes: 5
 
       - run: npm run check:sidecar
+        env:
+          CUTREADY_TEST_BROWSER_CHANNEL: chrome
 
   rust:
     name: Rust (Linux)

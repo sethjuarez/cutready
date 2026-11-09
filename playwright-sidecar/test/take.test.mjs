@@ -37,6 +37,7 @@ test("browser.take logs a semantic witness for each step", { timeout: 60000 }, a
     const { log } = await runTake({
       url: fixture,
       outDir,
+      channel: process.env.CUTREADY_TEST_BROWSER_CHANNEL,
       markers: { holdMs: 40, gapMs: 40, settleMs: 100 },
       steps: [
         { type: "click", label: "open", selectors: ["#open"], expect: { selector: "#panel" } },
