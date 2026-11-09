@@ -313,8 +313,7 @@ pub fn first_change(
             d > threshold
         })
         .collect();
-    for w in 0..=changed.len().saturating_sub(persist) {
-        let window = &candidates[w..w + persist];
+    for (w, window) in candidates.windows(persist).enumerate() {
         let consecutive = window.windows(2).all(|p| p[1] == p[0] + 1);
         if consecutive && changed[w..w + persist].iter().all(|&c| c) {
             found = Some(candidates[w]);
@@ -519,6 +518,16 @@ mod tests {
         let ex = [false, false, false, true, true, false];
         let d = first_change(&gap, 0, 1, 6, Roi::full(1, 1), &ex, &cfg);
         assert_eq!(d.frame, None);
+        // Windows with fewer candidates than `persist` report no detection.
+        let short = frames(&[10, 60, 60], 1, 1);
+        assert_eq!(
+            first_change(&short, 0, 1, 1, Roi::full(1, 1), &[], &cfg).frame,
+            None
+        );
+        assert_eq!(
+            first_change(&short, 0, 2, 3, Roi::full(1, 1), &[], &cfg).frame,
+            None
+        );
     }
 
     #[test]
