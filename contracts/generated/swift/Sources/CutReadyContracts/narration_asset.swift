@@ -9,6 +9,8 @@ public struct NarrationAsset: TypraModel {
   public var path: String = ""
   public var sourceText: String = ""
   public var sourceTextHash: String = ""
+  public var narrativeText: String? = nil
+  public var narrativeTextHash: String? = nil
   public var mimeType: String = ""
   public var durationMs: UInt32? = nil
   public var leadingSilenceMs: UInt32? = nil
@@ -17,10 +19,12 @@ public struct NarrationAsset: TypraModel {
   public var byteSize: UInt64 = 0
   public var recordedAt: String = ""
 
-  public init(path: String = "", sourceText: String = "", sourceTextHash: String = "", mimeType: String = "", durationMs: UInt32? = nil, leadingSilenceMs: UInt32? = nil, trailingSilenceMs: UInt32? = nil, silenceThresholdDb: Float? = nil, byteSize: UInt64 = 0, recordedAt: String = "") {
+  public init(path: String = "", sourceText: String = "", sourceTextHash: String = "", narrativeText: String? = nil, narrativeTextHash: String? = nil, mimeType: String = "", durationMs: UInt32? = nil, leadingSilenceMs: UInt32? = nil, trailingSilenceMs: UInt32? = nil, silenceThresholdDb: Float? = nil, byteSize: UInt64 = 0, recordedAt: String = "") {
     self.path = path
     self.sourceText = sourceText
     self.sourceTextHash = sourceTextHash
+    self.narrativeText = narrativeText
+    self.narrativeTextHash = narrativeTextHash
     self.mimeType = mimeType
     self.durationMs = durationMs
     self.leadingSilenceMs = leadingSilenceMs
@@ -41,6 +45,12 @@ public struct NarrationAsset: TypraModel {
     }
     if let value = object["source_text_hash"] {
       instance.sourceTextHash = try TypraRuntime.string(value, field: "source_text_hash")
+    }
+    if let value = object["narrative_text"] {
+      instance.narrativeText = try TypraRuntime.string(value, field: "narrative_text")
+    }
+    if let value = object["narrative_text_hash"] {
+      instance.narrativeTextHash = try TypraRuntime.string(value, field: "narrative_text_hash")
     }
     if let value = object["mime_type"] {
       instance.mimeType = try TypraRuntime.string(value, field: "mime_type")
@@ -71,6 +81,12 @@ public struct NarrationAsset: TypraModel {
     result["path"] = self.path
     result["source_text"] = self.sourceText
     result["source_text_hash"] = self.sourceTextHash
+    if let value = self.narrativeText {
+      result["narrative_text"] = value
+    }
+    if let value = self.narrativeTextHash {
+      result["narrative_text_hash"] = value
+    }
     result["mime_type"] = self.mimeType
     if let value = self.durationMs {
       result["duration_ms"] = value

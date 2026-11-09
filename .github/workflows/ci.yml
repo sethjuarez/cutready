@@ -89,6 +89,11 @@ jobs:
         with:
           node-version: lts/*
 
+      # The Elucim frame renderer tests run through the sidecar's @elucim/cli.
+      - run: npm ci --prefix playwright-sidecar
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+
       # Clippy runs with -D warnings and the workspace lints (Cargo.toml), so
       # any warning fails the job.
       - run: npm run check:rust

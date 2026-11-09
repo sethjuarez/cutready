@@ -28,11 +28,13 @@ classDiagram
         +uint32 duration_seconds
         +string narrative
         +string demo_actions
+        +DemoStep[] demo_steps
         +string screenshot
         +unknown visual
         +MotionPoint[] motion_points
         +TypingSpot[] typing_spots
         +MotionPlan motion_plan
+        +FramingBeat[] framing_beats
         +string design_plan
         +NarrationAsset narration
         +NarrationPlan narration_plan
@@ -46,6 +48,10 @@ classDiagram
         +boolean design_plan
     }
     PlanningRow *-- PlanningCellLocks
+    class DemoStep {
+        +string kind
+    }
+    PlanningRow *-- DemoStep
     class MotionPoint {
         +uint8 rank
         +float32 x
@@ -74,10 +80,16 @@ classDiagram
         +string rationale
     }
     PlanningRow *-- MotionPlan
+    class FramingBeat {
+        +string kind
+    }
+    PlanningRow *-- FramingBeat
     class NarrationAsset {
         +string path
         +string source_text
         +string source_text_hash
+        +string narrative_text
+        +string narrative_text_hash
         +string mime_type
         +uint32 duration_ms
         +uint32 leading_silence_ms
@@ -122,11 +134,13 @@ that id is taken; save always writes it. Duplicate ids are rejected with
 | duration_seconds | uint32 | Concrete duration in seconds. |
 | narrative | string |  |
 | demo_actions | string |  |
+| demo_steps | [DemoStep[]](../demostep/) | Normalized walkthrough steps compiled from prose actions or rough recordings. Omitted when empty.(Related Types: [DemoStepNavigate](../demostepnavigate/), [DemoStepClick](../demostepclick/), [DemoStepType](../demosteptype/), [DemoStepSelect](../demostepselect/), [DemoStepWaitFor](../demostepwaitfor/), [DemoStepHighlight](../demostephighlight/)) |
 | screenshot | string | Project-relative screenshot path. Legacy files may omit it; save writes `null` when unset. |
 | visual | unknown | Project-relative Elucim visual path (legacy files may inline the document). Opaque. |
 | motion_points | [MotionPoint[]](../motionpoint/) |  |
 | typing_spots | [TypingSpot[]](../typingspot/) |  |
 | motion_plan | [MotionPlan](../motionplan/) |  |
+| framing_beats | [FramingBeat[]](../framingbeat/) | Editorial camera/framing beats; t_ms is row-relative. Omitted when empty.(Related Types: [FramingBeatFullScreen](../framingbeatfullscreen/), [FramingBeatZoomTo](../framingbeatzoomto/), [FramingBeatHold](../framingbeathold/)) |
 | design_plan | string | Designer brief for the visual. |
 | narration | [NarrationAsset](../narrationasset/) |  |
 | narration_plan | [NarrationPlan](../narrationplan/) |  |
@@ -136,8 +150,10 @@ that id is taken; save always writes it. Duplicate ids are rejected with
 The following types are composed within `PlanningRow`:
 
 - [PlanningCellLocks](../planningcelllocks/)
+- [DemoStep](../demostep/)
 - [MotionPoint](../motionpoint/)
 - [TypingSpot](../typingspot/)
 - [MotionPlan](../motionplan/)
+- [FramingBeat](../framingbeat/)
 - [NarrationAsset](../narrationasset/)
 - [NarrationPlan](../narrationplan/)

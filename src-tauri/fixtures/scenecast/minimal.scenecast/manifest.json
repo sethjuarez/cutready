@@ -1,0 +1,50 @@
+{
+  "schema_version": "scenecast.bundle.v1",
+  "title": "Interactive fixture",
+  "sections": [
+    {
+      "id": "main",
+      "title": "Main",
+      "scenes": [
+        "start",
+        "pricing"
+      ]
+    }
+  ],
+  "graph": {
+    "start_scene": "start",
+    "scenes": [
+      {
+        "id": "start",
+        "title": "Start",
+        "kind": "screenshot",
+        "assets": {
+          "screenshot": "captures/start.png"
+        },
+        "hotspots": [
+          {
+            "id": "pricing-link",
+            "label": "View pricing",
+            "target": "pricing",
+            "bounds": {
+              "x": 420.0,
+              "y": 240.0,
+              "width": 160.0,
+              "height": 48.0
+            }
+          }
+        ]
+      },
+      {
+        "id": "pricing",
+        "title": "Pricing",
+        "kind": "screenshot",
+        "assets": {
+          "screenshot": "captures/pricing.png"
+        },
+        "hotspots": []
+      }
+    ]
+  },
+  "assets": []
+}

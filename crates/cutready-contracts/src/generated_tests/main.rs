@@ -4,10 +4,14 @@
 #![allow(unused_imports, dead_code, non_camel_case_types, unused_variables, unexpected_cfgs, clippy::all)]
 
 mod planning_cell_locks_test;
+mod demo_step_test;
+mod interaction_bounds_test;
 mod motion_point_test;
 mod typing_spot_test;
 mod motion_plan_keyframe_test;
 mod motion_plan_test;
+mod framing_beat_test;
+mod framing_rect_test;
 mod narration_asset_test;
 mod narration_beat_test;
 mod narration_plan_test;

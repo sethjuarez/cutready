@@ -3,6 +3,17 @@ import { Channel, commandErrorText, convertFileSrc, invoke } from "../services/t
 import { listenEvent } from "../ipc/events";
 import { useRecordingTakeActivity } from "../hooks/useRecordingTakeActivity";
 import { recordingIpc } from "../ipc/recording";
+import {
+  defaultVideoExportName,
+  ensureMp4Extension,
+  NarrationGenerationProgressDialog,
+  VideoExportOptionsDialog,
+  VideoExportProgressDialog,
+  VideoExportReadinessDialog,
+  type NarrationGenerationProgress,
+  type SketchVideoExportProgress,
+  type SketchVideoExportSettings,
+} from "./videoExport/VideoExportDialogs";
 import type { TokenResponse } from "../types/auth";
 import { open, save } from "../dialogs";
 import { openPath } from "@tauri-apps/plugin-opener";
@@ -18,7 +29,6 @@ import { ProjectImage } from "./ProjectImage";
 import { ScreenCaptureOverlay } from "./ScreenCaptureOverlay";
 import { PresentationShell as SketchPreview } from "./presentation/PresentationShell";
 import { DocumentHeader, documentTitleInputClass, DocumentCrumbs } from "./DocumentHeader";
-import { Dialog } from "./Dialog";
 import { FieldAiButton } from "./FieldAiButton";
 import { LockedDocumentBanner } from "./LockedDocumentBanner";
 import { NarrationRecordingDialog, type NarrationRecordingTake } from "./NarrationRecordingDialog";
@@ -50,6 +60,13 @@ import { buildPlainSsml, inferSpeechEndpoint, SPEECH_TOKEN_SCOPE } from "../serv
 import { validateGeneratedSsml } from "../services/narrationSsml";
 import { readClipboardImage } from "../utils/clipboardImage";
 import { newPlanningRowId } from "../utils/planningRowId";
+import {
+  emptyVideoExportOptions,
+  getVideoExportIssues,
+  normalizeVideoExportOptions,
+  type VideoExportIssue,
+  type VideoExportOptions,
+} from "../utils/videoExport";
 
 interface MonitorInfo {
   id: number;
@@ -67,29 +84,7 @@ const REQUESTED_SETTINGS_TAB_KEY = "cutready:requested-settings-tab";
 type ProjectAsset = { path: string; size: number; assetType: string };
 type ProjectAudioAsset = { path: string; size: number; mimeType: string; modifiedAt: number };
 type SketchVideoExport = { path: string; duration_seconds: number; row_count: number };
-type SketchVideoExportProgress = { phase: string; current: number; total: number; message: string };
-type NarrationGenerationProgress = { phase: string; current: number; total: number; message: string };
-type SketchVideoExportSettings = {
-  includeTitleCard: boolean;
-  titleCardDurationSeconds: number;
-  titleToFirstRowHoldSeconds: number;
-  rowTransitionHoldSeconds: number;
-  finalHoldSeconds: number;
-  rowTransitionDipSeconds: number;
-  narrationTailHoldSeconds: number;
-  motionMaxScale: number;
-  videoWidth: number;
-  videoHeight: number;
-  videoFps: number;
-  videoEncoder: string;
-  videoPixelFormat: string;
-  videoCrf: string;
-  backgroundMusicPath?: string | null;
-  backgroundMusicVolumeDb: number;
-  backgroundMusicDuckNarration: boolean;
-  backgroundMusicFadeSeconds: number;
-};
-type VideoExportIssue = { rowNumber: number; missing: string[] };
+
 type AgentChatResult = { response: string };
 type NarrationSsmlRow = {
   row_number: number;
@@ -325,248 +320,6 @@ function drawDecodedWaveform(canvas: HTMLCanvasElement, audioBuffer: AudioBuffer
     context.lineTo(x, ((1 - min) * height) / 2);
   }
   context.stroke();
-}
-
-function getVideoExportIssues(rows: PlanningRow[]): VideoExportIssue[] {
-  if (rows.length === 0) {
-    return [{ rowNumber: 0, missing: ["at least one row"] }];
-  }
-
-  return rows.flatMap((row, index) => {
-    const missing: string[] = [];
-    if (!row.screenshot?.trim()) missing.push("screenshot");
-    if (!row.narration?.path?.trim()) missing.push("narration");
-    return missing.length > 0 ? [{ rowNumber: index + 1, missing }] : [];
-  });
-}
-
-function slugifyExportName(value: string): string {
-  const slug = value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return slug || "sketch";
-}
-
-function formatExportTimestamp(date = new Date()): string {
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return [
-    date.getFullYear(),
-    pad(date.getMonth() + 1),
-    pad(date.getDate()),
-    "-",
-    pad(date.getHours()),
-    pad(date.getMinutes()),
-    pad(date.getSeconds()),
-  ].join("");
-}
-
-function defaultVideoExportName(title: string): string {
-  const fileName = `${slugifyExportName(title)}-${formatExportTimestamp()}.mp4`;
-  return fileName;
-}
-
-function ensureMp4Extension(path: string): string {
-  return /\.mp4$/i.test(path) ? path : `${path}.mp4`;
-}
-
-function VideoExportReadinessDialog({
-  issues,
-  onClose,
-}: {
-  issues: VideoExportIssue[] | null;
-  onClose: () => void;
-}) {
-  if (!issues) return null;
-
-  const hasRows = !(issues.length === 1 && issues[0].rowNumber === 0);
-
-  return (
-    <Dialog
-      isOpen={issues !== null}
-      onClose={onClose}
-      align="top"
-      topOffset="18vh"
-      width="w-full max-w-lg mx-4"
-      labelledBy="video-export-readiness-title"
-    >
-      <div className="cr-modal-surface overflow-hidden">
-        <div className="flex items-start gap-3 border-b border-[rgb(var(--color-border))] px-5 py-4">
-          <div className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
-            <Film className="h-4 w-4" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h2 id="video-export-readiness-title" className="text-sm font-semibold text-[rgb(var(--color-text))]">
-              Video export needs a complete sketch
-            </h2>
-            <p className="mt-1 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
-              CutReady can render a sketch video when every row has a screenshot and narration. Add the missing pieces below, then export again.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-1.5 text-[rgb(var(--color-text-secondary))] transition-colors hover:bg-[rgb(var(--color-surface-alt))] hover:text-[rgb(var(--color-text))]"
-            aria-label="Close video export requirements"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="max-h-[45vh] overflow-y-auto px-5 py-4">
-          {!hasRows ? (
-            <div className="rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/60 px-3 py-2 text-xs text-[rgb(var(--color-text-secondary))]">
-              Add at least one planning row with a screenshot and narration.
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {issues.map((issue) => (
-                <div
-                  key={issue.rowNumber}
-                  className="flex items-center justify-between gap-3 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/60 px-3 py-2"
-                >
-                  <span className="text-xs font-medium text-[rgb(var(--color-text))]">Row {issue.rowNumber}</span>
-                  <span className="text-xs text-[rgb(var(--color-text-secondary))]">
-                    Missing {issue.missing.join(" and ")}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="flex justify-end border-t border-[rgb(var(--color-border))] px-5 py-4">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg bg-[rgb(var(--color-accent))] px-3 py-2 text-xs font-semibold text-[rgb(var(--color-accent-fg))] transition-colors hover:bg-[rgb(var(--color-accent-hover))]"
-          >
-            Got it
-          </button>
-        </div>
-      </div>
-    </Dialog>
-  );
-}
-
-function VideoExportProgressDialog({
-  progress,
-}: {
-  progress: SketchVideoExportProgress | null;
-}) {
-  if (!progress) return null;
-
-  const total = Math.max(1, progress.total);
-  const current = Math.min(Math.max(0, progress.current), total);
-  const percent = Math.round((current / total) * 100);
-  const isFinishing = progress.phase === "complete";
-
-  return (
-    <Dialog
-      isOpen={progress !== null}
-      onClose={() => {}}
-      align="top"
-      topOffset="18vh"
-      width="w-full max-w-md mx-4"
-      labelledBy="video-export-progress-title"
-    >
-      <div className="cr-modal-surface overflow-hidden">
-        <div className="px-5 py-5">
-          <div className="flex items-start gap-3">
-            <div className="relative grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
-              <Film className="h-4 w-4" />
-              <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 animate-pulse rounded-full bg-[rgb(var(--color-accent))]" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <h2 id="video-export-progress-title" className="text-sm font-semibold text-[rgb(var(--color-text))]">
-                Exporting video
-              </h2>
-              <p className="mt-1 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
-                {progress.message}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-5">
-            <div className="mb-2 flex items-center justify-between text-xs font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">
-              <span>{isFinishing ? "Wrapping up" : `Step ${current} of ${total}`}</span>
-              <span>{percent}%</span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-[rgb(var(--color-surface-alt))]">
-              <div
-                className="h-full rounded-full bg-[rgb(var(--color-accent))] transition-all duration-300 ease-out"
-                style={{ width: `${percent}%` }}
-              />
-            </div>
-          </div>
-
-          <div className="mt-4 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/60 px-3 py-2 text-xs text-[rgb(var(--color-text-secondary))]">
-            Keeping screenshots lossless in RGB, preserving generated narration from first sample to last sample, easing into the first row, holding adjacent rows for transitions, and ending on a 3-second hold.
-          </div>
-        </div>
-      </div>
-    </Dialog>
-  );
-}
-
-function NarrationGenerationProgressDialog({
-  progress,
-}: {
-  progress: NarrationGenerationProgress | null;
-}) {
-  if (!progress) return null;
-
-  const total = Math.max(1, progress.total);
-  const current = Math.min(Math.max(0, progress.current), total);
-  const percent = Math.round((current / total) * 100);
-  const isFinishing = progress.phase === "complete";
-
-  return (
-    <Dialog
-      isOpen={progress !== null}
-      onClose={() => {}}
-      align="top"
-      topOffset="18vh"
-      width="w-full max-w-md mx-4"
-      labelledBy="narration-generation-progress-title"
-    >
-      <div className="cr-modal-surface overflow-hidden">
-        <div className="px-5 py-5">
-          <div className="flex items-start gap-3">
-            <div className="relative grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[rgb(var(--color-accent))]/10 text-[rgb(var(--color-accent))]">
-              <Mic2 className="h-4 w-4" />
-              <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 animate-pulse rounded-full bg-[rgb(var(--color-accent))]" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <h2 id="narration-generation-progress-title" className="text-sm font-semibold text-[rgb(var(--color-text))]">
-                Generating narration
-              </h2>
-              <p className="mt-1 text-xs leading-5 text-[rgb(var(--color-text-secondary))]">
-                {progress.message}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-5">
-            <div className="mb-2 flex items-center justify-between text-xs font-medium uppercase tracking-[0.14em] text-[rgb(var(--color-text-secondary))]">
-              <span>{isFinishing ? "Wrapping up" : `Step ${current} of ${total}`}</span>
-              <span>{percent}%</span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-[rgb(var(--color-surface-alt))]">
-              <div
-                className="h-full rounded-full bg-[rgb(var(--color-accent))] transition-all duration-300 ease-out"
-                style={{ width: `${percent}%` }}
-              />
-            </div>
-          </div>
-
-          <div className="mt-4 rounded-xl border border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface-alt))]/60 px-3 py-2 text-xs text-[rgb(var(--color-text-secondary))]">
-            The Narration Director is writing grounded SSML, shaping pacing with Azure Speech markup, synthesizing MAI-Voice-2 audio, and attaching each cut to its row.
-          </div>
-        </div>
-      </div>
-    </Dialog>
-  );
 }
 
 interface SketchRowAssetPickerProps {
@@ -1043,6 +796,7 @@ export function SketchForm() {
   const [videoExportProgress, setVideoExportProgress] = useState<SketchVideoExportProgress | null>(null);
   const [narrationGenerationProgress, setNarrationGenerationProgress] = useState<NarrationGenerationProgress | null>(null);
   const [videoExportIssues, setVideoExportIssues] = useState<VideoExportIssue[] | null>(null);
+  const [videoExportOptionsOpen, setVideoExportOptionsOpen] = useState(false);
   const [showNarrationSetupPrompt, setShowNarrationSetupPrompt] = useState(false);
   // Last AI diffs are preserved so the user can re-show them after auto-fade
   const lastAiDiffs = useRef<{ rows: Set<number>; diffs: RowDiff[] } | null>(null);
@@ -1508,14 +1262,16 @@ The Actions describe what happens on screen — use them as visual design hints.
 
   const handleNarrationPicked = useCallback(async (asset: ProjectAudioAsset) => {
     if (narrationPickerRowIdx === null) return;
-    const sourceText = localRows[narrationPickerRowIdx]?.narrative ?? "";
+    const narrativeText = localRows[narrationPickerRowIdx]?.narrative ?? "";
     const updated = [...localRows];
     updated[narrationPickerRowIdx] = {
       ...updated[narrationPickerRowIdx],
       narration: {
         path: asset.path,
-        source_text: sourceText,
-        source_text_hash: await sha256Hex(sourceText),
+        source_text: narrativeText,
+        source_text_hash: await sha256Hex(narrativeText),
+        narrative_text: narrativeText,
+        narrative_text_hash: await sha256Hex(narrativeText),
         mime_type: asset.mimeType,
         duration_ms: null,
         leading_silence_ms: null,
@@ -2175,10 +1931,18 @@ Rules:
     return selectedPath ? ensureMp4Extension(selectedPath) : null;
   }, [activeSketch, localTitle]);
 
-  const handleExportVideo = useCallback(async (rowsOverride?: PlanningRow[], outputPathOverride?: string) => {
+  const handleExportVideo = useCallback(async (
+    rowsOverride?: PlanningRow[],
+    outputPathOverride?: string,
+    exportOptionsOverride?: VideoExportOptions,
+  ) => {
     if (!activeSketchPath || !activeSketch || !projectRoot || exportingVideo) return;
     const rowsForExport = rowsOverride ?? localRows;
-    const issues = getVideoExportIssues(rowsForExport);
+    const exportOptions = normalizeVideoExportOptions(
+      exportOptionsOverride ?? emptyVideoExportOptions(rowsForExport.length),
+      rowsForExport.length,
+    );
+    const issues = getVideoExportIssues(rowsForExport, exportOptions);
     if (issues.length > 0) {
       setVideoExportIssues(issues);
       return;
@@ -2227,6 +1991,9 @@ Rules:
         narrationTailHoldSeconds: settings.videoExportOverrideEnabled
           ? settings.workspaceVideoExportNarrationTailHoldSeconds
           : settings.videoExportNarrationTailHoldSeconds,
+        resolvedDemoPath: exportOptions.resolvedDemoPath,
+        generateResolvedDemo: exportOptions.generateResolvedDemo,
+        visualFrameManifestPaths: exportOptions.visualFrameManifestPaths,
         motionMaxScale: settings.videoExportOverrideEnabled
           ? settings.workspaceVideoExportMotionMaxScale
           : settings.videoExportMotionMaxScale,
@@ -2332,6 +2099,16 @@ Rules:
     settings.workspaceVideoExportCrf,
   ]);
 
+  const openVideoExportOptions = useCallback(() => {
+    if (localRows.length === 0 || exportingVideo) return;
+    setVideoExportOptionsOpen(true);
+  }, [exportingVideo, localRows.length]);
+
+  const handleExportVideoWithOptions = useCallback((options: VideoExportOptions) => {
+    setVideoExportOptionsOpen(false);
+    void handleExportVideo(undefined, undefined, options);
+  }, [handleExportVideo]);
+
   const handleGenerateVideo = useCallback(async () => {
     if (!activeSketchPath || sketchLocked || exportingVideo) return;
     try {
@@ -2342,7 +2119,7 @@ Rules:
         setVideoExportProgress(null);
         return;
       }
-      await handleExportVideo(rowsForExport, outputPath);
+      await handleExportVideo(rowsForExport, outputPath, emptyVideoExportOptions(rowsForExport.length));
     } catch (err) {
       console.warn("[SketchForm] Failed to generate video:", err);
       useToastStore.getState().show(`Could not generate video: ${commandErrorText(err)}`, 7000, "error");
@@ -2453,7 +2230,7 @@ Rules:
       id: "video",
       label: exportingVideo ? "Rendering video..." : "Video",
       icon: documentToolbarIcons.video,
-      onSelect: () => void handleExportVideo(),
+      onSelect: openVideoExportOptions,
       disabled: exportingVideo,
     },
   ] : [];
@@ -2809,6 +2586,13 @@ The row already has a visual and design_plan. You may read the sketch for contex
         />
       )}
 
+      <VideoExportOptionsDialog
+        isOpen={videoExportOptionsOpen}
+        rows={localRows}
+        projectRoot={projectRoot}
+        onClose={() => setVideoExportOptionsOpen(false)}
+        onExport={handleExportVideoWithOptions}
+      />
       <VideoExportReadinessDialog
         issues={videoExportIssues}
         onClose={() => setVideoExportIssues(null)}

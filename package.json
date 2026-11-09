@@ -25,6 +25,7 @@
     "test:e2e:live": "auditaur drill test --grep @live --grep-invert @human",
     "test:e2e:human": "auditaur drill test --grep @human",
     "test:e2e:draftline": "node scripts/draftline-drill/run.mjs",
+    "test:e2e:video-export": "node scripts/auditaur-video-export-drill.mjs",
     "test:watch": "vitest",
     "tauri": "tauri",
     "visual:score": "node scripts/visual-eval/score-visuals.mjs",

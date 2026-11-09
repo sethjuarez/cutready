@@ -4,10 +4,29 @@
 
 export { LoadContext, SaveContext } from "./context";
 export { PlanningCellLocks } from "./planning-cell-locks";
+
+export {
+  DemoStep,
+  DemoStepNavigate,
+  DemoStepClick,
+  DemoStepType,
+  DemoStepSelect,
+  DemoStepWaitFor,
+  DemoStepHighlight,
+} from "./demo-step";
+export { InteractionBounds } from "./interaction-bounds";
 export { MotionPoint } from "./motion-point";
 export { TypingSpot } from "./typing-spot";
 export { MotionPlanKeyframe } from "./motion-plan-keyframe";
 export { MotionPlan } from "./motion-plan";
+
+export {
+  FramingBeat,
+  FramingBeatFullScreen,
+  FramingBeatZoomTo,
+  FramingBeatHold,
+} from "./framing-beat";
+export { FramingRect } from "./framing-rect";
 export { NarrationAsset } from "./narration-asset";
 export { NarrationBeat } from "./narration-beat";
 export { NarrationPlan } from "./narration-plan";

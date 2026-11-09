@@ -23,6 +23,8 @@ classDiagram
         +string path
         +string source_text
         +string source_text_hash
+        +string narrative_text
+        +string narrative_text_hash
         +string mime_type
         +uint32 duration_ms
         +uint32 leading_silence_ms
@@ -44,8 +46,10 @@ path: .cutready/narration/row-1.wav
 | Name | Type | Description |
 | ---- | ---- | ----------- |
 | path | string |  |
-| source_text | string | Narrative text at the moment the audio was recorded or generated. |
+| source_text | string | Spoken text used when the audio was recorded or generated. |
 | source_text_hash | string | SHA-256 of `source_text`. |
+| narrative_text | string | Row narrative text at the moment the audio was recorded or generated. |
+| narrative_text_hash | string | SHA-256 of `narrative_text`, for non-lossy staleness checks. |
 | mime_type | string |  |
 | duration_ms | uint32 | Legacy files may omit it; save writes `null` when unknown. |
 | leading_silence_ms | uint32 |  |

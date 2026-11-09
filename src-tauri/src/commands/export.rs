@@ -3,6 +3,7 @@
 use tauri::{Manager, State};
 use tauri_plugin_auditaur::auditaur_command;
 
+use super::{cmd_err, CmdError};
 use crate::{
     engine::{export, word_export},
     AppState,
@@ -88,6 +89,22 @@ pub async fn export_sketch_video(
     .await
     .map_err(|e| e.to_string())?
     .map_err(|e| e.to_string())
+}
+
+#[auditaur_command(skip_all, err)]
+pub async fn inspect_resolved_demo(
+    relative_path: String,
+    row_count: usize,
+    source_row_ids: Option<Vec<String>>,
+    state: State<'_, AppState>,
+) -> Result<export::ResolvedDemoInspection, CmdError> {
+    let root = project_root(&state).map_err(cmd_err)?;
+    tokio::task::spawn_blocking(move || {
+        export::inspect_resolved_demo(&root, &relative_path, row_count, source_row_ids.as_deref())
+    })
+    .await
+    .map_err(cmd_err)?
+    .map_err(|e| CmdError::failed(format!("{e:#}")))
 }
 
 #[auditaur_command(skip_all, err)]

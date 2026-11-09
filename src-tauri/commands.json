@@ -79,6 +79,7 @@
     "export_logs",
     "export_markdown_to_word",
     "export_sketch_video",
+    "inspect_resolved_demo",
     "fetch_remote",
     "fetch_url_content",
     "filtered_files",

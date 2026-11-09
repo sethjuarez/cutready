@@ -48,6 +48,13 @@
         "CmdErrorDetails",
         "CommandFailure",
         "DeleteRowOp",
+        "DemoStep",
+        "DemoStepClick",
+        "DemoStepHighlight",
+        "DemoStepNavigate",
+        "DemoStepSelect",
+        "DemoStepType",
+        "DemoStepWaitFor",
         "DocumentEdit",
         "DocumentEditRequest",
         "DocumentMetadata",
@@ -58,8 +65,14 @@
         "DocumentValidation",
         "EditOp",
         "EditService",
+        "FramingBeat",
+        "FramingBeatFullScreen",
+        "FramingBeatHold",
+        "FramingBeatZoomTo",
+        "FramingRect",
         "InsertRowOp",
         "InsertStoryboardItemOp",
+        "InteractionBounds",
         "MotionPlan",
         "MotionPlanKeyframe",
         "MotionPoint",
@@ -209,6 +222,55 @@
           "protocol": false
         },
         {
+          "name": "DemoStep",
+          "kind": "value",
+          "group": "",
+          "source": "DemoStep",
+          "protocol": false
+        },
+        {
+          "name": "DemoStepClick",
+          "kind": "value",
+          "group": "",
+          "source": "DemoStep",
+          "protocol": false
+        },
+        {
+          "name": "DemoStepHighlight",
+          "kind": "value",
+          "group": "",
+          "source": "DemoStep",
+          "protocol": false
+        },
+        {
+          "name": "DemoStepNavigate",
+          "kind": "value",
+          "group": "",
+          "source": "DemoStep",
+          "protocol": false
+        },
+        {
+          "name": "DemoStepSelect",
+          "kind": "value",
+          "group": "",
+          "source": "DemoStep",
+          "protocol": false
+        },
+        {
+          "name": "DemoStepType",
+          "kind": "value",
+          "group": "",
+          "source": "DemoStep",
+          "protocol": false
+        },
+        {
+          "name": "DemoStepWaitFor",
+          "kind": "value",
+          "group": "",
+          "source": "DemoStep",
+          "protocol": false
+        },
+        {
           "name": "DocumentEdit",
           "kind": "value",
           "group": "",
@@ -279,6 +341,41 @@
           "protocol": true
         },
         {
+          "name": "FramingBeat",
+          "kind": "value",
+          "group": "",
+          "source": "FramingBeat",
+          "protocol": false
+        },
+        {
+          "name": "FramingBeatFullScreen",
+          "kind": "value",
+          "group": "",
+          "source": "FramingBeat",
+          "protocol": false
+        },
+        {
+          "name": "FramingBeatHold",
+          "kind": "value",
+          "group": "",
+          "source": "FramingBeat",
+          "protocol": false
+        },
+        {
+          "name": "FramingBeatZoomTo",
+          "kind": "value",
+          "group": "",
+          "source": "FramingBeat",
+          "protocol": false
+        },
+        {
+          "name": "FramingRect",
+          "kind": "value",
+          "group": "",
+          "source": "FramingRect",
+          "protocol": false
+        },
+        {
           "name": "InsertRowOp",
           "kind": "value",
           "group": "",
@@ -290,6 +387,13 @@
           "kind": "value",
           "group": "",
           "source": "EditOp",
+          "protocol": false
+        },
+        {
+          "name": "InteractionBounds",
+          "kind": "value",
+          "group": "",
+          "source": "InteractionBounds",
           "protocol": false
         },
         {
@@ -803,6 +907,7 @@
         "CmdError",
         "CmdErrorDetails",
         "CommandFailure",
+        "DemoStep",
         "DocumentEdit",
         "DocumentEditRequest",
         "DocumentMetadata",
@@ -813,6 +918,9 @@
         "DocumentValidation",
         "EditOp",
         "EditService",
+        "FramingBeat",
+        "FramingRect",
+        "InteractionBounds",
         "MotionPlan",
         "MotionPlanKeyframe",
         "MotionPoint",
@@ -856,6 +964,13 @@
         "CmdErrorDetails",
         "CommandFailure",
         "DeleteRowOp",
+        "DemoStep",
+        "DemoStepClick",
+        "DemoStepHighlight",
+        "DemoStepNavigate",
+        "DemoStepSelect",
+        "DemoStepType",
+        "DemoStepWaitFor",
         "DocumentEdit",
         "DocumentEditRequest",
         "DocumentMetadata",
@@ -866,8 +981,14 @@
         "DocumentValidation",
         "EditOp",
         "EditService",
+        "FramingBeat",
+        "FramingBeatFullScreen",
+        "FramingBeatHold",
+        "FramingBeatZoomTo",
+        "FramingRect",
         "InsertRowOp",
         "InsertStoryboardItemOp",
+        "InteractionBounds",
         "MotionPlan",
         "MotionPlanKeyframe",
         "MotionPoint",
@@ -1017,6 +1138,55 @@
           "protocol": false
         },
         {
+          "name": "DemoStep",
+          "kind": "value",
+          "group": "",
+          "source": "demo_step",
+          "protocol": false
+        },
+        {
+          "name": "DemoStepClick",
+          "kind": "value",
+          "group": "",
+          "source": "demo_step",
+          "protocol": false
+        },
+        {
+          "name": "DemoStepHighlight",
+          "kind": "value",
+          "group": "",
+          "source": "demo_step",
+          "protocol": false
+        },
+        {
+          "name": "DemoStepNavigate",
+          "kind": "value",
+          "group": "",
+          "source": "demo_step",
+          "protocol": false
+        },
+        {
+          "name": "DemoStepSelect",
+          "kind": "value",
+          "group": "",
+          "source": "demo_step",
+          "protocol": false
+        },
+        {
+          "name": "DemoStepType",
+          "kind": "value",
+          "group": "",
+          "source": "demo_step",
+          "protocol": false
+        },
+        {
+          "name": "DemoStepWaitFor",
+          "kind": "value",
+          "group": "",
+          "source": "demo_step",
+          "protocol": false
+        },
+        {
           "name": "DocumentEdit",
           "kind": "value",
           "group": "",
@@ -1087,6 +1257,41 @@
           "protocol": true
         },
         {
+          "name": "FramingBeat",
+          "kind": "value",
+          "group": "",
+          "source": "framing_beat",
+          "protocol": false
+        },
+        {
+          "name": "FramingBeatFullScreen",
+          "kind": "value",
+          "group": "",
+          "source": "framing_beat",
+          "protocol": false
+        },
+        {
+          "name": "FramingBeatHold",
+          "kind": "value",
+          "group": "",
+          "source": "framing_beat",
+          "protocol": false
+        },
+        {
+          "name": "FramingBeatZoomTo",
+          "kind": "value",
+          "group": "",
+          "source": "framing_beat",
+          "protocol": false
+        },
+        {
+          "name": "FramingRect",
+          "kind": "value",
+          "group": "",
+          "source": "framing_rect",
+          "protocol": false
+        },
+        {
           "name": "InsertRowOp",
           "kind": "value",
           "group": "",
@@ -1098,6 +1303,13 @@
           "kind": "value",
           "group": "",
           "source": "edit_op",
+          "protocol": false
+        },
+        {
+          "name": "InteractionBounds",
+          "kind": "value",
+          "group": "",
+          "source": "interaction_bounds",
           "protocol": false
         },
         {
@@ -1612,6 +1824,7 @@
         "cmd_error_details",
         "command_failure",
         "context",
+        "demo_step",
         "document_edit",
         "document_edit_request",
         "document_metadata",
@@ -1622,6 +1835,9 @@
         "document_validation",
         "edit_op",
         "edit_service",
+        "framing_beat",
+        "framing_rect",
+        "interaction_bounds",
         "motion_plan",
         "motion_plan_keyframe",
         "motion_point",
@@ -1666,6 +1882,13 @@
         "CmdErrorDetails",
         "CommandFailure",
         "DeleteRowOp",
+        "DemoStep",
+        "DemoStepClick",
+        "DemoStepHighlight",
+        "DemoStepNavigate",
+        "DemoStepSelect",
+        "DemoStepType",
+        "DemoStepWaitFor",
         "DocumentEdit",
         "DocumentEditRequest",
         "DocumentMetadata",
@@ -1676,8 +1899,14 @@
         "DocumentValidation",
         "EditOp",
         "EditService",
+        "FramingBeat",
+        "FramingBeatFullScreen",
+        "FramingBeatHold",
+        "FramingBeatZoomTo",
+        "FramingRect",
         "InsertRowOp",
         "InsertStoryboardItemOp",
+        "InteractionBounds",
         "MotionPlan",
         "MotionPlanKeyframe",
         "MotionPoint",
@@ -1827,6 +2056,55 @@
           "protocol": false
         },
         {
+          "name": "DemoStep",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/demo_step.swift",
+          "protocol": false
+        },
+        {
+          "name": "DemoStepClick",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/demo_step.swift",
+          "protocol": false
+        },
+        {
+          "name": "DemoStepHighlight",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/demo_step.swift",
+          "protocol": false
+        },
+        {
+          "name": "DemoStepNavigate",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/demo_step.swift",
+          "protocol": false
+        },
+        {
+          "name": "DemoStepSelect",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/demo_step.swift",
+          "protocol": false
+        },
+        {
+          "name": "DemoStepType",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/demo_step.swift",
+          "protocol": false
+        },
+        {
+          "name": "DemoStepWaitFor",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/demo_step.swift",
+          "protocol": false
+        },
+        {
           "name": "DocumentEdit",
           "kind": "value",
           "group": "",
@@ -1897,6 +2175,41 @@
           "protocol": true
         },
         {
+          "name": "FramingBeat",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/framing_beat.swift",
+          "protocol": false
+        },
+        {
+          "name": "FramingBeatFullScreen",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/framing_beat.swift",
+          "protocol": false
+        },
+        {
+          "name": "FramingBeatHold",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/framing_beat.swift",
+          "protocol": false
+        },
+        {
+          "name": "FramingBeatZoomTo",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/framing_beat.swift",
+          "protocol": false
+        },
+        {
+          "name": "FramingRect",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/framing_rect.swift",
+          "protocol": false
+        },
+        {
           "name": "InsertRowOp",
           "kind": "value",
           "group": "",
@@ -1908,6 +2221,13 @@
           "kind": "value",
           "group": "",
           "source": "Sources/CutReadyContracts/edit_op.swift",
+          "protocol": false
+        },
+        {
+          "name": "InteractionBounds",
+          "kind": "value",
+          "group": "",
+          "source": "Sources/CutReadyContracts/interaction_bounds.swift",
           "protocol": false
         },
         {
@@ -2421,6 +2741,7 @@
         "Sources/CutReadyContracts/cmd_error.swift",
         "Sources/CutReadyContracts/cmd_error_details.swift",
         "Sources/CutReadyContracts/command_failure.swift",
+        "Sources/CutReadyContracts/demo_step.swift",
         "Sources/CutReadyContracts/document_edit.swift",
         "Sources/CutReadyContracts/document_edit_request.swift",
         "Sources/CutReadyContracts/document_metadata.swift",
@@ -2431,6 +2752,9 @@
         "Sources/CutReadyContracts/document_validation.swift",
         "Sources/CutReadyContracts/edit_op.swift",
         "Sources/CutReadyContracts/edit_service.swift",
+        "Sources/CutReadyContracts/framing_beat.swift",
+        "Sources/CutReadyContracts/framing_rect.swift",
+        "Sources/CutReadyContracts/interaction_bounds.swift",
         "Sources/CutReadyContracts/motion_plan.swift",
         "Sources/CutReadyContracts/motion_plan_keyframe.swift",
         "Sources/CutReadyContracts/motion_point.swift",
@@ -2475,6 +2799,13 @@
         "CmdErrorDetails",
         "CommandFailure",
         "DeleteRowOp",
+        "DemoStep",
+        "DemoStepClick",
+        "DemoStepHighlight",
+        "DemoStepNavigate",
+        "DemoStepSelect",
+        "DemoStepType",
+        "DemoStepWaitFor",
         "DocumentEdit",
         "DocumentEditRequest",
         "DocumentMetadata",
@@ -2485,8 +2816,14 @@
         "DocumentValidation",
         "EditOp",
         "EditService",
+        "FramingBeat",
+        "FramingBeatFullScreen",
+        "FramingBeatHold",
+        "FramingBeatZoomTo",
+        "FramingRect",
         "InsertRowOp",
         "InsertStoryboardItemOp",
+        "InteractionBounds",
         "MotionPlan",
         "MotionPlanKeyframe",
         "MotionPoint",
@@ -2636,6 +2973,55 @@
           "protocol": false
         },
         {
+          "name": "DemoStep",
+          "kind": "value",
+          "group": "",
+          "source": "./demo-step",
+          "protocol": false
+        },
+        {
+          "name": "DemoStepClick",
+          "kind": "value",
+          "group": "",
+          "source": "./demo-step",
+          "protocol": false
+        },
+        {
+          "name": "DemoStepHighlight",
+          "kind": "value",
+          "group": "",
+          "source": "./demo-step",
+          "protocol": false
+        },
+        {
+          "name": "DemoStepNavigate",
+          "kind": "value",
+          "group": "",
+          "source": "./demo-step",
+          "protocol": false
+        },
+        {
+          "name": "DemoStepSelect",
+          "kind": "value",
+          "group": "",
+          "source": "./demo-step",
+          "protocol": false
+        },
+        {
+          "name": "DemoStepType",
+          "kind": "value",
+          "group": "",
+          "source": "./demo-step",
+          "protocol": false
+        },
+        {
+          "name": "DemoStepWaitFor",
+          "kind": "value",
+          "group": "",
+          "source": "./demo-step",
+          "protocol": false
+        },
+        {
           "name": "DocumentEdit",
           "kind": "value",
           "group": "",
@@ -2706,6 +3092,41 @@
           "protocol": true
         },
         {
+          "name": "FramingBeat",
+          "kind": "value",
+          "group": "",
+          "source": "./framing-beat",
+          "protocol": false
+        },
+        {
+          "name": "FramingBeatFullScreen",
+          "kind": "value",
+          "group": "",
+          "source": "./framing-beat",
+          "protocol": false
+        },
+        {
+          "name": "FramingBeatHold",
+          "kind": "value",
+          "group": "",
+          "source": "./framing-beat",
+          "protocol": false
+        },
+        {
+          "name": "FramingBeatZoomTo",
+          "kind": "value",
+          "group": "",
+          "source": "./framing-beat",
+          "protocol": false
+        },
+        {
+          "name": "FramingRect",
+          "kind": "value",
+          "group": "",
+          "source": "./framing-rect",
+          "protocol": false
+        },
+        {
           "name": "InsertRowOp",
           "kind": "value",
           "group": "",
@@ -2717,6 +3138,13 @@
           "kind": "value",
           "group": "",
           "source": "./edit-op",
+          "protocol": false
+        },
+        {
+          "name": "InteractionBounds",
+          "kind": "value",
+          "group": "",
+          "source": "./interaction-bounds",
           "protocol": false
         },
         {
@@ -3230,6 +3658,7 @@
         "./cmd-error",
         "./cmd-error-details",
         "./command-failure",
+        "./demo-step",
         "./document-edit",
         "./document-edit-request",
         "./document-metadata",
@@ -3240,6 +3669,9 @@
         "./document-validation",
         "./edit-op",
         "./edit-service",
+        "./framing-beat",
+        "./framing-rect",
+        "./interaction-bounds",
         "./motion-plan",
         "./motion-plan-keyframe",
         "./motion-point",

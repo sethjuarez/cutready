@@ -1,0 +1,123 @@
+{
+  "schemaVersion": "scenecast.resolved-demo.v1",
+  "title": "Demo",
+  "startSceneId": "start",
+  "capturePolicy": {
+    "kind": "reference-existing-assets",
+    "assetBase": "bundle-relative",
+    "missingCaptureBehavior": "diagnostic"
+  },
+  "steps": [
+    {
+      "id": "step-start",
+      "order": 0,
+      "sceneId": "start",
+      "title": "Start",
+      "description": "Opening screen.",
+      "notes": "Starter scene for Demo",
+      "screenshot": {
+        "path": "captures/start.png"
+      },
+      "video": null,
+      "guideMarks": [
+        {
+          "id": "cta-guide",
+          "label": "Primary call to action",
+          "bounds": {
+            "x": 8.0,
+            "y": 9.0,
+            "width": 10.0,
+            "height": 11.0
+          },
+          "style": "highlight"
+        }
+      ],
+      "targets": [
+        {
+          "id": "pricing-link",
+          "label": "View pricing",
+          "targetSceneId": "pricing",
+          "trigger": "click",
+          "scrollDirection": "any",
+          "bounds": {
+            "x": 1.0,
+            "y": 2.0,
+            "width": 3.0,
+            "height": 4.0
+          },
+          "selectors": []
+        }
+      ]
+    },
+    {
+      "id": "step-pricing",
+      "order": 1,
+      "sceneId": "pricing",
+      "title": "Pricing",
+      "description": null,
+      "notes": null,
+      "screenshot": {
+        "path": "captures/pricing.png"
+      },
+      "video": null,
+      "guideMarks": [],
+      "targets": []
+    }
+  ],
+  "segments": [
+    {
+      "id": "segment-start-scene",
+      "kind": "scene",
+      "stepId": "step-start",
+      "startMs": 0,
+      "durationMs": 1000,
+      "endMs": 1000,
+      "capture": {
+        "path": "captures/start.png"
+      },
+      "interaction": null,
+      "frames": [],
+      "waitMs": 0
+    },
+    {
+      "id": "segment-start-pricing-link",
+      "kind": "wait",
+      "stepId": "step-start",
+      "startMs": 1000,
+      "durationMs": 250,
+      "endMs": 1250,
+      "capture": null,
+      "interaction": {
+        "id": "pricing-link",
+        "label": "View pricing",
+        "targetSceneId": "pricing",
+        "trigger": "click",
+        "scrollDirection": "any",
+        "bounds": {
+          "x": 1.0,
+          "y": 2.0,
+          "width": 3.0,
+          "height": 4.0
+        },
+        "selectors": []
+      },
+      "frames": [],
+      "waitMs": 250
+    },
+    {
+      "id": "segment-pricing-scene",
+      "kind": "scene",
+      "stepId": "step-pricing",
+      "startMs": 1250,
+      "durationMs": 1000,
+      "endMs": 2250,
+      "capture": {
+        "path": "captures/pricing.png"
+      },
+      "interaction": null,
+      "frames": [],
+      "waitMs": 0
+    }
+  ],
+  "diagnostics": []
+}

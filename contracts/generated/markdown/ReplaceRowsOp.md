@@ -36,11 +36,13 @@ classDiagram
         +uint32 duration_seconds
         +string narrative
         +string demo_actions
+        +DemoStep[] demo_steps
         +string screenshot
         +unknown visual
         +MotionPoint[] motion_points
         +TypingSpot[] typing_spots
         +MotionPlan motion_plan
+        +FramingBeat[] framing_beats
         +string design_plan
         +NarrationAsset narration
         +NarrationPlan narration_plan

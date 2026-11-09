@@ -9,10 +9,14 @@ use super::context::{LoadContext, SaveContext};
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct NarrationAsset {
     pub path: String,
-    /// Narrative text at the moment the audio was recorded or generated.
+    /// Spoken text used when the audio was recorded or generated.
     pub source_text: String,
     /// SHA-256 of `source_text`.
     pub source_text_hash: String,
+    /// Row narrative text at the moment the audio was recorded or generated.
+    pub narrative_text: Option<String>,
+    /// SHA-256 of `narrative_text`, for non-lossy staleness checks.
+    pub narrative_text_hash: Option<String>,
     pub mime_type: String,
     /// Legacy files may omit it; save writes `null` when unknown.
     pub duration_ms: Option<u32>,
@@ -70,6 +74,8 @@ impl NarrationAsset {
             path: value.get("path").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
             source_text: value.get("source_text").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
             source_text_hash: value.get("source_text_hash").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+            narrative_text: value.get("narrative_text").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            narrative_text_hash: value.get("narrative_text_hash").and_then(|v| v.as_str()).map(|s| s.to_string()),
             mime_type: value.get("mime_type").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
             duration_ms: value.get("duration_ms").and_then(|v| v.as_u64().and_then(|n| u32::try_from(n).ok())),
             leading_silence_ms: value.get("leading_silence_ms").and_then(|v| v.as_u64().and_then(|n| u32::try_from(n).ok())),
@@ -93,6 +99,12 @@ impl NarrationAsset {
         result.insert("path".to_string(), serde_json::Value::String(self.path.clone()));
         result.insert("source_text".to_string(), serde_json::Value::String(self.source_text.clone()));
         result.insert("source_text_hash".to_string(), serde_json::Value::String(self.source_text_hash.clone()));
+        if let Some(val) = self.narrative_text.as_ref() {
+            result.insert("narrative_text".to_string(), serde_json::Value::String(val.clone()));
+        }
+        if let Some(val) = self.narrative_text_hash.as_ref() {
+            result.insert("narrative_text_hash".to_string(), serde_json::Value::String(val.clone()));
+        }
         result.insert("mime_type".to_string(), serde_json::Value::String(self.mime_type.clone()));
         result.insert("duration_ms".to_string(), serde_json::Value::Null);
         if let Some(val) = self.duration_ms.as_ref() {
