@@ -1311,7 +1311,6 @@ fn planned_frame_counts(sequence: &FrameSequencePlan, fps: u32) -> anyhow::Resul
     if fps == 0 {
         anyhow::bail!("Video FPS must be greater than zero");
     }
-    let total_frames = ((sequence.total_seconds * f64::from(fps)).round() as i64).max(1);
     let positive_indices = sequence
         .frames
         .iter()
@@ -1322,23 +1321,24 @@ fn planned_frame_counts(sequence: &FrameSequencePlan, fps: u32) -> anyhow::Resul
     if positive_indices.is_empty() {
         anyhow::bail!("Frame sequence has no positive-duration frames");
     }
-
+    let total_frames = ((sequence.total_seconds * f64::from(fps)).round() as i64)
+        .max(positive_indices.len() as i64);
+    // Quantize cumulative boundaries so per-frame rounding error doesn't pile up at the end.
     let mut counts = vec![0; sequence.frames.len()];
-    let mut allocated = 0i64;
+    let mut elapsed_seconds = 0.0;
+    let mut previous_boundary = 0i64;
     for (ordinal, index) in positive_indices.iter().enumerate() {
-        let remaining_positive = positive_indices.len() - ordinal - 1;
-        let frame = &sequence.frames[*index];
-        let count = if remaining_positive == 0 {
-            total_frames - allocated
+        let remaining_positive = (positive_indices.len() - ordinal - 1) as i64;
+        elapsed_seconds += sequence.frames[*index].duration_seconds;
+        let boundary = if remaining_positive == 0 {
+            total_frames
         } else {
-            let remaining_floor = remaining_positive as i64;
-            let rounded = (frame.duration_seconds * f64::from(fps)).round() as i64;
-            rounded
-                .max(1)
-                .min((total_frames - allocated - remaining_floor).max(1))
+            ((elapsed_seconds * f64::from(fps)).round() as i64)
+                .max(previous_boundary + 1)
+                .min(total_frames - remaining_positive)
         };
-        counts[*index] = count.max(0) as u32;
-        allocated += count.max(0);
+        counts[*index] = (boundary - previous_boundary) as u32;
+        previous_boundary = boundary;
     }
     Ok(counts)
 }

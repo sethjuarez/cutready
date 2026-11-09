@@ -918,6 +918,29 @@ fn planned_frame_counts_preserve_total_for_sub_100ms_frames() {
 }
 
 #[test]
+fn planned_frame_counts_keep_a_coalesced_gesture_at_its_recorded_length() {
+    // 8ms samples at 30fps coalesce to ~40ms steps; per-step rounding used to shrink the gesture.
+    let manifest = (0..120)
+        .map(|index| crate::engine::frame_sequence::FrameManifestEntry {
+            path: PathBuf::from(format!("frame-{index:03}.png")),
+            duration_ms: if index == 119 { 0 } else { 8 },
+            terminal: index == 119,
+        })
+        .collect::<Vec<_>>();
+    let gesture_seconds = 119.0 * 0.008;
+    let plan = crate::engine::frame_sequence::plan_frame_sequence(&manifest, 2.0, 30).unwrap();
+
+    let counts = planned_frame_counts(&plan, 30).unwrap();
+
+    let gesture_frames: u32 = counts[..counts.len() - 1].iter().sum();
+    assert!(
+        (f64::from(gesture_frames) / 30.0 - gesture_seconds).abs() <= 1.0 / 30.0,
+        "gesture encoded as {gesture_frames} frames"
+    );
+    assert_eq!(counts.iter().sum::<u32>(), 60);
+}
+
+#[test]
 fn hold_video_filter_adds_dip_to_black_for_row_transitions() {
     let settings = SketchVideoExportSettings::default();
     let fade_out = FfmpegFilterGraph::chain(hold_video_filters(

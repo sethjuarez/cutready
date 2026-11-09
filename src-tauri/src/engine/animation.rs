@@ -61,8 +61,10 @@ pub fn render_visual_frame_manifest(
     .with_context(|| format!("Elucim visual `{visual_relative_path}` is not valid JSON"))?;
     // Legacy `{version: "1.0", root}` visuals are migrated to 2.0 here; the
     // sidecar renderer only understands `scene` + `elements` documents.
-    let document = cutready_core::visual_document::normalize_visual_to_v2(&raw)
-        .map_err(|error| anyhow::anyhow!("Invalid Elucim visual `{visual_relative_path}`: {error}"))?;
+    let document =
+        cutready_core::visual_document::normalize_visual_to_v2(&raw).map_err(|error| {
+            anyhow::anyhow!("Invalid Elucim visual `{visual_relative_path}`: {error}")
+        })?;
     let payload = json!({
         "document": document,
         "visualPath": visual_path,

@@ -3,6 +3,9 @@ import type { DemoStep, FramingBeat, InteractionBounds, PlanningRow } from "../.
 
 const DEMO_STEP_KINDS = new Set(["navigate", "click", "type", "select", "wait_for", "highlight"]);
 const FRAMING_BEAT_KINDS = new Set(["full_screen", "zoom_to", "hold"]);
+const CAPTURE_POLICIES = ["before_after", "before_after_and_motion"] as const;
+const WAIT_EDIT_POLICIES = ["keep_natural", "compress_wait", "show_start_and_end", "cut_to_completion", "keep_visible"] as const;
+const FRAMING_EASINGS = ["linear", "ease_in_out", "ease_out"] as const;
 
 function formatIntentJson<T>(value: T[] | null | undefined): string {
   return JSON.stringify(value ?? [], null, 2);
@@ -53,11 +56,17 @@ function validateIntentEntry(entry: Record<string, unknown>, label: string, item
   const optionalBoolean = (field: string) => (
     entry[field] == null || typeof entry[field] === "boolean" ? null : `${prefix} needs boolean "${field}".`
   );
+  const optionalEnum = (field: string, allowed: readonly string[]) => (
+    entry[field] == null || (typeof entry[field] === "string" && allowed.includes(entry[field]))
+      ? null
+      : `${prefix} needs "${field}" as one of: ${allowed.join(", ")}.`
+  );
 
   switch (entry.kind) {
     case "navigate":
       return requireString("target");
     case "click":
+      return requireString("target") ?? validateOptionalInteractionBounds(entry.target_bounds, prefix) ?? optionalEnum("capture", CAPTURE_POLICIES);
     case "highlight":
       return requireString("target") ?? validateOptionalInteractionBounds(entry.target_bounds, prefix);
     case "type":
@@ -65,11 +74,11 @@ function validateIntentEntry(entry: Record<string, unknown>, label: string, item
     case "select":
       return requireString("target") ?? requireString("value") ?? validateOptionalInteractionBounds(entry.target_bounds, prefix);
     case "wait_for":
-      return requireString("condition") ?? optionalNumber("timeout_ms");
+      return requireString("condition") ?? optionalNumber("timeout_ms") ?? optionalEnum("edit_policy", WAIT_EDIT_POLICIES);
     case "full_screen":
       return optionalNumber("at_ms");
     case "zoom_to":
-      return optionalNumber("at_ms") ?? optionalNumber("duration_ms") ?? validateOptionalFramingRect(entry.rect, prefix);
+      return optionalNumber("at_ms") ?? optionalNumber("duration_ms") ?? validateOptionalFramingRect(entry.rect, prefix) ?? optionalEnum("easing", FRAMING_EASINGS);
     case "hold":
       return optionalNumber("at_ms") ?? requireNumber("duration_ms");
     default:

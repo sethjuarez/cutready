@@ -312,7 +312,9 @@ mod tests {
             .iter()
             .all(|frame| frame.duration_seconds >= 1.0 / 30.0 - 1e-9));
         assert_eq!(plan.frames.len(), 25);
-        assert!(matches!(plan.fit, FrameSequenceFit::Held { hold_seconds } if (hold_seconds - 1.04).abs() < 1e-9));
+        assert!(
+            matches!(plan.fit, FrameSequenceFit::Held { hold_seconds } if (hold_seconds - 1.04).abs() < 1e-9)
+        );
     }
 
     #[test]

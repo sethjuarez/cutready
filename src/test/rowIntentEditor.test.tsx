@@ -34,6 +34,20 @@ describe("RowIntentEditor millisecond fields", () => {
     expect(onFramingBeatsChange).not.toHaveBeenCalled();
   });
 
+  it("rejects an unknown wait edit policy, which Rust would refuse to load", () => {
+    const row = { id: "r1", time: "", narrative: "", demo_actions: "" } as PlanningRow;
+    const onDemoStepsChange = vi.fn();
+    render(
+      <RowIntentEditor rowIndex={0} row={row} demoStepsReadOnly={false} framingBeatsReadOnly={false}
+        onDemoStepsChange={onDemoStepsChange} onFramingBeatsChange={vi.fn()} />,
+    );
+
+    commit(screen.getByLabelText("Demo steps"), JSON.stringify([{ kind: "wait_for", condition: "ready", edit_policy: "invalid" }]));
+
+    expect(screen.getByText(/needs "edit_policy" as one of/)).toBeTruthy();
+    expect(onDemoStepsChange).not.toHaveBeenCalled();
+  });
+
   it("commits whole non-negative milliseconds", () => {
     const { onFramingBeatsChange, textarea } = renderEditor();
 
