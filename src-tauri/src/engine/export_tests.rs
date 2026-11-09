@@ -1509,6 +1509,10 @@ fn export_sketch_video_generates_elucim_frame_manifest_for_visual_row() {
         eprintln!("Skipping Elucim visual export test because FFmpeg is unavailable");
         return;
     }
+    if !crate::engine::animation::elucim_renderer_available() {
+        eprintln!("{}", crate::engine::animation::ELUCIM_RENDERER_SKIP_MESSAGE);
+        return;
+    }
 
     let temp_dir = TempDir::new().unwrap();
     let root = temp_dir.path();

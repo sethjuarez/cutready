@@ -203,13 +203,31 @@ pub struct PrepareBrowserOptions {
     pub browser_channel: Option<String>,
 }
 
-/// Resolve the playwright-sidecar directory.
+/// Resolve the playwright-sidecar directory (Playwright automation and the
+/// Elucim frame renderer).
 ///
-/// In development, this is relative to the Cargo manifest (i.e. the project root).
-/// In production, this would resolve from the app's bundled resources.
+/// Checked in order: the `CUTREADY_SIDECAR_DIR` override, a `playwright-sidecar`
+/// folder next to the executable (or in macOS `Contents/Resources`), then the
+/// source checkout used by development builds. The app does not bundle the
+/// sidecar yet, so packaged builds need the override or a sibling folder.
 pub fn resolve_sidecar_dir() -> PathBuf {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    manifest_dir
+    if let Some(dir) = std::env::var_os("CUTREADY_SIDECAR_DIR").filter(|dir| !dir.is_empty()) {
+        return PathBuf::from(dir);
+    }
+    if let Some(exe_dir) = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(Path::to_path_buf))
+    {
+        for candidate in [
+            exe_dir.join("playwright-sidecar"),
+            exe_dir.join("../Resources/playwright-sidecar"),
+        ] {
+            if candidate.join("package.json").is_file() {
+                return candidate;
+            }
+        }
+    }
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("Cargo manifest dir should have a parent")
         .join("playwright-sidecar")

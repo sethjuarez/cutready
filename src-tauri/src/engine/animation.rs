@@ -43,17 +43,17 @@ pub fn render_visual_frame_manifest(
         )
     })?;
 
-    let script = elucim_frame_manifest_script();
+    let sidecar_dir = super::interaction::resolve_sidecar_dir();
+    let script = sidecar_dir.join(ELUCIM_FRAMES_SCRIPT);
     if !script.is_file() {
+        anyhow::bail!("Elucim frame renderer not found: {}", script.display());
+    }
+    if !elucim_renderer_installed(&sidecar_dir) {
         anyhow::bail!(
-            "Elucim frame manifest script not found: {}",
-            script.display()
+            "Elucim frame renderer dependencies are missing; run `npm ci` in {}",
+            sidecar_dir.display()
         );
     }
-    let repo_root = script
-        .parent()
-        .and_then(Path::parent)
-        .unwrap_or_else(|| Path::new("."));
     let payload = json!({
         "visualPath": visual_path,
         "outputDir": output_dir,
@@ -64,7 +64,7 @@ pub fn render_visual_frame_manifest(
     let mut command = Command::new("node");
     command
         .arg(&script)
-        .current_dir(repo_root)
+        .current_dir(&sidecar_dir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -117,13 +117,28 @@ pub fn render_visual_frame_manifest(
     })
 }
 
-fn elucim_frame_manifest_script() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .join("scripts")
-        .join("elucim-frame-manifest.mjs")
+const ELUCIM_FRAMES_SCRIPT: &str = "elucim-frames.mjs";
+
+fn elucim_renderer_installed(sidecar_dir: &Path) -> bool {
+    sidecar_dir
+        .join("node_modules")
+        .join("@elucim")
+        .join("cli")
+        .join("package.json")
+        .is_file()
 }
+
+/// Whether the sidecar's Elucim renderer can run (`npm ci` has been run in it).
+#[cfg(test)]
+pub(crate) fn elucim_renderer_available() -> bool {
+    elucim_renderer_installed(&super::interaction::resolve_sidecar_dir())
+}
+
+/// Printed by tests that skip because the sidecar's Elucim renderer isn't
+/// installed; `npm run test:e2e:video-export` treats it as a failure.
+#[cfg(test)]
+pub(crate) const ELUCIM_RENDERER_SKIP_MESSAGE: &str =
+    "Skipping Elucim render test: run `npm ci --prefix playwright-sidecar`";
 
 fn excerpt(value: &str, max_len: usize) -> String {
     if value.len() <= max_len {
@@ -141,8 +156,11 @@ mod tests {
     use super::*;
 
     #[test]
-    #[ignore = "requires `npm ci` (node + @resvg/resvg-js); run via npm run test:e2e:video-export"]
     fn renders_elucim_visual_to_frame_manifest() {
+        if !elucim_renderer_available() {
+            eprintln!("{ELUCIM_RENDERER_SKIP_MESSAGE}");
+            return;
+        }
         let project = tempfile::tempdir().unwrap();
         let visuals_dir = project.path().join(".cutready").join("visuals");
         std::fs::create_dir_all(&visuals_dir).unwrap();
@@ -209,9 +227,11 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(manifest.frame_count, 3);
+        // Elucim plans frames 0..=duration, so a 3-frame timeline yields 4
+        // frames ending on its final state.
+        assert_eq!(manifest.frame_count, 4);
         assert!(manifest.manifest_path.is_file());
-        let first_frame_path = output_dir.join("frame-0000.png");
+        let first_frame_path = output_dir.join("frame-000000.png");
         assert!(first_frame_path.is_file());
         let first_frame = ImageReader::open(&first_frame_path)
             .unwrap()
@@ -224,7 +244,7 @@ mod tests {
         assert_eq!(background_pixel, [251, 250, 248, 255]);
         let manifest_json: serde_json::Value =
             serde_json::from_slice(&std::fs::read(&manifest.manifest_path).unwrap()).unwrap();
-        assert_eq!(manifest_json["frames"].as_array().unwrap().len(), 3);
-        assert_eq!(manifest_json["frames"][2]["terminal"], true);
+        assert_eq!(manifest_json["frames"].as_array().unwrap().len(), 4);
+        assert_eq!(manifest_json["frames"][3]["terminal"], true);
     }
 }

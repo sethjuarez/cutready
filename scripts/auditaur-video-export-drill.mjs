@@ -69,8 +69,9 @@ const checks = [
   {
     id: "elucim-frame-renderer",
     description: "Elucim visuals rasterize to themed PNG frames and a terminal frame manifest",
-    args: ["test", "-p", "cutready", "animation", "--lib", "--quiet", "--", "--include-ignored"],
+    args: ["test", "-p", "cutready", "animation", "--lib", "--quiet", "--", "--nocapture"],
     expectedMinTests: 2,
+    forbiddenOutput: ["Skipping Elucim render test"],
   },
   {
     id: "rendered-video-duration",
@@ -96,9 +97,11 @@ const checks = [
       "export_sketch_video_generates_elucim_frame_manifest_for_visual_row",
       "--lib",
       "--quiet",
+      "--",
+      "--nocapture",
     ],
     expectedMinTests: 1,
-    forbiddenOutput: ["Skipping Elucim visual export test"],
+    forbiddenOutput: ["Skipping Elucim visual export test", "Skipping Elucim render test"],
   },
 ];
 
