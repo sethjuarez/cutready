@@ -41,7 +41,8 @@ jobs:
   frontend:
     name: Frontend
     needs: changes
-    runs-on: ubuntu-latest
+    # Playwright's Chromium does not support ubuntu-latest (26.04) yet.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
@@ -55,11 +56,25 @@ jobs:
 
       - run: npm run check:frontend
 
+      # Playwright 1.58's installer hangs extracting downloads on Node 26, so
+      # the sidecar steps run on Node 22.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - run: npm ci --prefix playwright-sidecar
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
 
+      # take.test.mjs drives a real page to check the DOM witness. It uses the
+      # runner's Chrome, so only Playwright's ffmpeg (for video) is installed.
+      - run: npx playwright install ffmpeg
+        working-directory: playwright-sidecar
+        timeout-minutes: 5
+
       - run: npm run check:sidecar
+        env:
+          CUTREADY_TEST_BROWSER_CHANNEL: chrome
 
   rust:
     name: Rust (Linux)

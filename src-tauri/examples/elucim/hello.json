@@ -1,0 +1,30 @@
+{
+  "version": "2.0",
+  "scene": {
+    "type": "player",
+    "fps": 30,
+    "width": 640,
+    "height": 360,
+    "background": "$background",
+    "children": ["panel"]
+  },
+  "elements": {
+    "panel": {
+      "id": "panel",
+      "type": "rect",
+      "props": { "type": "rect", "x": 160, "y": 90, "width": 320, "height": 180, "fill": "$accent" }
+    }
+  },
+  "timelines": {
+    "intro": { "id": "intro", "duration": 30, "tracks": [] }
+  },
+  "stateMachines": {
+    "main": {
+      "id": "main",
+      "entry": "play",
+      "states": { "play": { "timeline": "intro" } },
+      "transitions": [{ "id": "entry-play", "from": "entry", "to": "play", "trigger": "onStart" }]
+    }
+  },
+  "defaultStateMachine": "main"
+}

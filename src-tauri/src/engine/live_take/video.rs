@@ -12,7 +12,7 @@ use std::process::Stdio;
 pub const THUMB: (usize, usize) = (320, 180);
 const MARKER_THUMB: (usize, usize) = (32, 18);
 
-fn ok_stdout(out: std::process::Output, what: &str) -> Result<Vec<u8>> {
+pub(super) fn ok_stdout(out: std::process::Output, what: &str) -> Result<Vec<u8>> {
     if !out.status.success() {
         let err = String::from_utf8_lossy(&out.stderr);
         let tail: String = err.lines().rev().take(6).collect::<Vec<_>>().join(" | ");
@@ -62,7 +62,7 @@ pub fn check_cadence(pts: &[Micros], frame: Micros, tolerance: Micros) -> Result
     Ok(first)
 }
 
-fn decode_raw(path: &Path, filter: &str, pix_fmt: &str) -> Result<Vec<u8>> {
+pub(super) fn decode_raw(path: &Path, filter: &str, pix_fmt: &str) -> Result<Vec<u8>> {
     let out = run_ffmpeg([
         "-v".as_ref(),
         "error".as_ref(),

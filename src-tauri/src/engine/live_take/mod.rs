@@ -9,6 +9,7 @@
 
 pub mod analysis;
 pub mod audio;
+pub mod audit;
 pub mod cli;
 pub mod narration;
 pub mod pipeline;
@@ -16,6 +17,6 @@ pub mod script;
 pub mod sidecar_io;
 pub mod video;
 
-pub use cli::{parse_args, run_cli, CliArgs};
+pub use cli::{parse_args, run_cli, CliArgs, CliMode};
 pub use pipeline::{run_live_take, LiveTakeOptions, LiveTakeOutcome};
 pub use script::LiveTakeScript;

@@ -41,8 +41,48 @@ pub struct LoggedStep {
     pub postcondition_ms: Option<f64>,
     #[serde(default)]
     pub observe_box: Option<ViewBox>,
+    /// Page-side semantic witness (absent in takes recorded before it).
+    #[serde(default)]
+    pub witness: Option<StepWitness>,
     #[serde(default)]
     pub error: Option<String>,
+}
+
+/// One host↔page clock probe (minimum roundtrip of a few evaluations).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct ClockProbe {
+    pub host_ms: f64,
+    pub page_ms: f64,
+    pub rtt_ms: f64,
+    /// Add to a page epoch time to get host ms after t0.
+    pub offset_ms: f64,
+}
+
+/// A page event reported by the witness init script, in page epoch ms.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WitnessEvent {
+    pub doc: String,
+    /// `input:pointerdown|keydown|wheel`, `effect:mutation|input|scroll`
+    /// or `document` (a new document's first frame).
+    pub kind: String,
+    pub at: f64,
+    /// Next animation frame after the event (frame-begin time).
+    pub frame: f64,
+    #[serde(default, rename = "box")]
+    pub bbox: Option<ViewBox>,
+    /// The document URL when the event was sent.
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub received_ms: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StepWitness {
+    pub clock_pre: ClockProbe,
+    pub clock_post: ClockProbe,
+    #[serde(default)]
+    pub events: Vec<WitnessEvent>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -76,6 +116,7 @@ pub fn tts_cache_key(text: &str, voice: &str) -> String {
         .collect()
 }
 
+#[derive(Clone)]
 pub struct SpeechAuth {
     pub endpoint: String,
     pub token: Option<String>,

@@ -18,7 +18,7 @@ cargo run -p cutready --example live_take -- \
 ```
 
 - Output goes to `.live-take-out/<name>-<timestamp>/` (gitignored), with `take.mp4`, `take.json` and the intermediate take files.
-- Exit codes: `0` audit passed, `2` audit failed, `1` pipeline error, `64` bad arguments.
+- Exit codes: `0` independent audit passed, `2` it failed (or render consistency failed), `3` uncertain, `1` pipeline error, `64` bad arguments. `--no-stt` skips the network transcription and `--audit-only DIR` re-audits an existing take; see `docs/video/audit.md`.
 - TTS results are cached in `.live-take-out/tts-cache/`, keyed by voice and narration, so reruns don't need a token.
 - `--max-takes` (default 3) controls automatic retakes when a take is rejected; rejected take folders are kept with a `rejected.txt`.
 
@@ -71,8 +71,9 @@ The scripts used in this slice are in `src-tauri/examples/live-take-scripts/`:
 3. **Analyze.** Marker runs are detected in the take (25 fps CFR), matched to the log, and `fit_epoch` maps hrtime to video time. The first visibly changed frame in the action's ROI is the observed landmark. A take whose dispatch frame falls under a marker run is rejected and recorded again.
 4. **Plan.** `anchor_actions` and `plan_timing` produce an EDL of play, freeze and drop segments. When the plan needs `InsertSilence`, real silence is spliced into the WAV at the planned sample and later words are shifted.
 5. **Render.** The EDL becomes a frame map: one source frame index per output frame. One ffmpeg process decodes the take to raw frames, Rust writes the mapped frames in order to a second ffmpeg that encodes H.264 at exactly the take fps and muxes the WAV as AAC. Every output frame is a copy of a decoded source frame, so timing is frame-exact without depending on filter-graph rounding (`trim`/`tpad`/`select`).
-6. **Audit.** Action frames are detected again in the **final MP4**, and word times come from the final audio timeline. Each cue's drift is the observed frame time minus the cue time. This is a render-consistency audit: it searches where the plan put each action and reuses the analysis ROI and detector, so it proves the render matches the plan, not that the raw landmark was right.
-7. **Write `take.json`.** It holds the script, words, action log, epoch fit, plan, EDL, splices, observed landmarks, audit and stage timings.
+6. **Render consistency.** Action frames are detected again in the **final MP4**, and word times come from the final audio timeline. Each cue's drift is the observed frame time minus the cue time. This check searches where the plan put each action and reuses the analysis ROI and detector, so it proves the render matches the plan, not that the raw landmark was right. It is stored as `renderConsistency` (`take.json` schema `cutready.live-take.v2`; earlier takes call it `audit`).
+7. **Write `take.json`.** It holds the script, words, action log (including the DOM witness), epoch fit, plan, EDL, splices, observed landmarks, render consistency and stage timings.
+8. **Independent audit.** The final MP4 is transcribed with Azure STT, the two full-frame detectors run on it, and the DOM witness is compared. The result goes to `audit.json` and `contact-sheet.png`. See `docs/video/audit.md`.
 
 ### Hiding the markers
 
@@ -124,7 +125,9 @@ The browser take dominates. Everything after it (analysis, render and audit) add
 
   Before these changes, about 2 in 3 real-site takes stalled. Afterwards, 5 of 5 runs were clean, with the longest marker run at 5 frames. The root cause isn't proven; network quiet correlates with the fix.
 - **Detection was late with a tiny ROI.** For the sidebar "Writing tests" link, the ROI was the link's own box. The link changes a few frames after the page does, so detection was 3–7 frames late. Clicks with a URL postcondition and no `observe` override now use the full frame.
-- **The audit shared that blind spot.** The audit re-detects with the same detector and ROI as analysis. So the late-detection take still passed, because the audit was consistently late in the same way. The audit proves that render matches the plan; it doesn't prove the plan was based on the right landmark. See the recommendations.
+- **The audit shared that blind spot.** The audit re-detects with the same detector and ROI as analysis. So the late-detection take still passed, because the audit was consistently late in the same way. The audit proves that render matches the plan; it doesn't prove the plan was based on the right landmark.
+  - The independent audit (`docs/video/audit.md`) measured what actually happened. It was more than "3–7 frames late": with the tiny link ROI, the planner anchored on the link's **active-highlight repaint**, while the page itself had navigated **1.0–1.3 s before** "writing" was spoken.
+  - Render consistency passed that take at −15 ms. The independent audit fails it at −1302 ms on the original take and −1022 ms on a reproduction (`playwright-dev-tiny-roi.json`).
 
 ## What was flaky on the real site
 
@@ -166,7 +169,7 @@ The rule of thumb: anything that needs frame or sample accuracy and has no opini
 
 ### (iii) Next slices
 
-1. **An independent audit.** Audit with a different detector or a full-frame ROI, so it can't share the analysis detector's blind spot, and report both numbers.
+1. **An independent audit.** Done: see `docs/video/audit.md`. Its remaining blind spots are listed there.
 2. **The marker stall's root cause.** Try CDP `Page.startScreencast` with explicit frame acks, or a headful capture, to see if the stall is in the recorder. Track the stall rate across more sites.
 3. **A cursor overlay.** Render a synthetic cursor from the logged pointer positions, so clicks read naturally on screen.
 4. **A sketch adapter.** Generate this script from sketch rows once they carry the fields above. Narration is joined from the rows and cues come from the row narrative.
