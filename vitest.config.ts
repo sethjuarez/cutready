@@ -19,6 +19,7 @@ export default defineConfig({
     globals: true,
     execArgv,
     setupFiles: ["./src/test/setup.ts"],
-    exclude: ["**/node_modules/**", "docs/**", "extensions/**"],
+    // playwright-sidecar has its own node:test suite (`npm run check:sidecar`).
+    exclude: ["**/node_modules/**", "docs/**", "extensions/**", "playwright-sidecar/**"],
   },
 });
