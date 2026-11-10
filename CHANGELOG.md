@@ -10,6 +10,59 @@
 
 Release Please manages this changelog. Do not edit manually.
 
+## [1.38.0](https://github.com/sethjuarez/cutready/compare/v1.37.0...v1.38.0) (2026-11-10)
+
+
+### Features
+
+* **canvas:** add CutReady canvas core (discovery, MCP client) ([#338](https://github.com/sethjuarez/cutready/issues/338)) ([1923cb5](https://github.com/sethjuarez/cutready/commit/1923cb58a4571490a74d82a38eeebf354602a6f5))
+* **canvas:** add project browser, editors and review panel ([#339](https://github.com/sethjuarez/cutready/issues/339)) ([00e1608](https://github.com/sethjuarez/cutready/commit/00e1608c487d5dcc1c6932a651dae31ce84524a2))
+* **ci:** file-budget, raw invoke and CLI output ratchets ([#322](https://github.com/sethjuarez/cutready/issues/322)) ([d2d077f](https://github.com/sethjuarez/cutready/commit/d2d077f187a3ccb4412c123f400acf0c69e169ae))
+* **cli:** add cutready-cli edit/validate/mcp with a contract-version handshake ([#318](https://github.com/sethjuarez/cutready/issues/318)) ([4adbc79](https://github.com/sethjuarez/cutready/commit/4adbc790279b40780d5783b211c89eda947d97f0))
+* **cli:** add review/keep/undo, MCP review tools and CLI discovery ([#319](https://github.com/sethjuarez/cutready/issues/319)) ([e3ffe26](https://github.com/sethjuarez/cutready/commit/e3ffe26b861449dcdd23c71e6f1e5b3a610e4b04))
+* **cli:** stable MCP client identity and list_documents ([#335](https://github.com/sethjuarez/cutready/issues/335)) ([46d7552](https://github.com/sethjuarez/cutready/commit/46d7552c3ac17eb793885e8e8d8a6c04eb6e3bab))
+* **cli:** type CLI and MCP results with Typra contracts ([#320](https://github.com/sethjuarez/cutready/issues/320)) ([159079a](https://github.com/sethjuarez/cutready/commit/159079afd0c0c21e22dd3c22c285aabb0e3a9219))
+* **contracts:** add EditOp and EditService contract ([#308](https://github.com/sethjuarez/cutready/issues/308)) ([d7d1482](https://github.com/sethjuarez/cutready/commit/d7d14821b0e42a177871cb7771b33f1a2250a35a))
+* **contracts:** add storyboard and note edit ops ([#309](https://github.com/sethjuarez/cutready/issues/309)) ([4335b31](https://github.com/sethjuarez/cutready/commit/4335b31de9c7e4aa60c4e5f4f133c8075140a8a5))
+* **core:** add EditSession write transaction with runs and op-log reconcile ([#313](https://github.com/sethjuarez/cutready/issues/313)) ([c2b0402](https://github.com/sethjuarez/cutready/commit/c2b0402eead1cefb3755a3bfa9e8797ca51087c6))
+* **core:** add stable planning row ids ([#307](https://github.com/sethjuarez/cutready/issues/307)) ([db048b9](https://github.com/sethjuarez/cutready/commit/db048b97bbf10f3eddfa460d6d3afbed78203622))
+* **desktop:** log every document write in a run-scoped SQLite op log ([#314](https://github.com/sethjuarez/cutready/issues/314)) ([b0ca1ab](https://github.com/sethjuarez/cutready/commit/b0ca1ab52a4c8b40d537266115b7fb45d0d82fc7))
+* **desktop:** review runs with op-aware keep and undo ([#316](https://github.com/sethjuarez/cutready/issues/316)) ([43479b3](https://github.com/sethjuarez/cutready/commit/43479b35f7ee126ab3338c2b887a47ce359530c9))
+* **desktop:** serialize writes on a cross-process repository file lock ([#315](https://github.com/sethjuarez/cutready/issues/315)) ([4abd535](https://github.com/sethjuarez/cutready/commit/4abd535feefe3cd88f4fe615e5904902054ad6b8))
+* **documents:** send expected version from app saves ([#333](https://github.com/sethjuarez/cutready/issues/333)) ([d8b8f82](https://github.com/sethjuarez/cutready/commit/d8b8f82eccce44b0bb5033edefaa7b83cf959030))
+* **history:** add History tab and Compare (saving model phases 3-4) ([#356](https://github.com/sethjuarez/cutready/issues/356)) ([a79d300](https://github.com/sethjuarez/cutready/commit/a79d300b78abf1ae0fee2534b0e67d91ef49f170))
+* **home:** check repositories, choose where saves go, and set project label templates ([#360](https://github.com/sethjuarez/cutready/issues/360)) ([f841303](https://github.com/sethjuarez/cutready/commit/f84130316d5f2eb97579cb7253ddd21e88a81301))
+* **home:** start a CutReady folder in an existing repo ([#357](https://github.com/sethjuarez/cutready/issues/357)) ([a7450a4](https://github.com/sethjuarez/cutready/commit/a7450a4b3f4847993c2956dd292536c26981fb33))
+* **import:** make Import a project-wide action ([#358](https://github.com/sethjuarez/cutready/issues/358)) ([54c1a59](https://github.com/sethjuarez/cutready/commit/54c1a59d6f63d375216c90513d24618252f13057))
+* **release:** bundle cutready-cli as an app sidecar and register it on start ([bee36ea](https://github.com/sethjuarez/cutready/commit/bee36ea950627202f9b3fa94e63586705374de5f))
+* **sidecar:** video calibration spike with Azure TTS takes and timing helpers ([#362](https://github.com/sethjuarez/cutready/issues/362)) ([2150837](https://github.com/sethjuarez/cutready/commit/2150837fb7653cc2fe96d0cb1bdd01d069a97615))
+* **sync:** plain-language team updates on Draftline 0.15 ([#359](https://github.com/sethjuarez/cutready/issues/359)) ([b946888](https://github.com/sethjuarez/cutready/commit/b9468885793c2e64b8735cf52a055d6006ec5842))
+* **ui:** add Direction C design tokens ([#336](https://github.com/sethjuarez/cutready/issues/336)) ([5eb5a1c](https://github.com/sethjuarez/cutready/commit/5eb5a1c9abd53b9116c775bb0351ac7f64f2e400))
+* **ui:** add Settings &gt; Accessibility ([#353](https://github.com/sethjuarez/cutready/issues/353)) ([aed49a6](https://github.com/sethjuarez/cutready/commit/aed49a69cb348b21912d18e6c9b40e4f52e70f11))
+* **ui:** Direction C companion chat messages ([#349](https://github.com/sethjuarez/cutready/issues/349)) ([8440dec](https://github.com/sethjuarez/cutready/commit/8440decfc2345198cbde80866b9c3b214a0bbaac))
+* **ui:** Direction C dialogs ([#350](https://github.com/sethjuarez/cutready/issues/350)) ([481f24c](https://github.com/sethjuarez/cutready/commit/481f24c052ce184aca4e51d1f780d95bd950fab9))
+* **ui:** Direction C document header ([#347](https://github.com/sethjuarez/cutready/issues/347)) ([05e0cba](https://github.com/sethjuarez/cutready/commit/05e0cba39b37dc6719d8297ce02fc1d75416c07d))
+* **ui:** Direction C home ([#343](https://github.com/sethjuarez/cutready/issues/343)) ([40b0880](https://github.com/sethjuarez/cutready/commit/40b08802f2a0d9d143cba80573f41fdc640a0311))
+* **ui:** Direction C planning row cards ([#346](https://github.com/sethjuarez/cutready/issues/346)) ([c7461e3](https://github.com/sethjuarez/cutready/commit/c7461e3f5ff1d5ffff816e4bcc77a74b9dc5012d))
+* **ui:** Direction C settings and review panel ([#351](https://github.com/sethjuarez/cutready/issues/351)) ([4a87841](https://github.com/sethjuarez/cutready/commit/4a87841dd5aab668dd05f816371f38bf84aadc98))
+* **ui:** Direction C storyboard and notes surfaces ([#348](https://github.com/sethjuarez/cutready/issues/348)) ([b9cae89](https://github.com/sethjuarez/cutready/commit/b9cae8924392dfb15594bd7aea3dc6e3a922485f))
+* **ui:** Direction C title bar ([#337](https://github.com/sethjuarez/cutready/issues/337)) ([75b3bf3](https://github.com/sethjuarez/cutready/commit/75b3bf323e8af7d48136526f8fc2c62d96d5d701))
+* **ui:** flat sidebar, media library and Direction C home ([#354](https://github.com/sethjuarez/cutready/issues/354)) ([83d191d](https://github.com/sethjuarez/cutready/commit/83d191d25d49acc6d4e2cc51fcbc102457245d3d))
+* **ui:** GitHub Copilot-style sidebar navigation ([#352](https://github.com/sethjuarez/cutready/issues/352)) ([c44a8bd](https://github.com/sethjuarez/cutready/commit/c44a8bd2cf3c3678778dcfc5840d6613100f4fd6))
+* **ui:** labelled navigation pane ([#340](https://github.com/sethjuarez/cutready/issues/340)) ([4417125](https://github.com/sethjuarez/cutready/commit/44171256db4bd936741c3025e34e39204efe7efe))
+* **ui:** layered companion pane ([#341](https://github.com/sethjuarez/cutready/issues/341)) ([b129fbf](https://github.com/sethjuarez/cutready/commit/b129fbfaf2fb88cad0d39e66523149bf6de79651))
+* **versioning:** hybrid CutReady projects on Draftline 0.10.1 ([#298](https://github.com/sethjuarez/cutready/issues/298)) ([b28c8c4](https://github.com/sethjuarez/cutready/commit/b28c8c45ee2faeee8e8d6f652921488571712cc7))
+* **versioning:** saving and version-history redesign, phase 1 ([#355](https://github.com/sethjuarez/cutready/issues/355)) ([0346065](https://github.com/sethjuarez/cutready/commit/0346065a84f404e98a3ef7211aa5cc20291dd547))
+* **video:** add pure demo timing core ([#364](https://github.com/sethjuarez/cutready/issues/364)) ([8868134](https://github.com/sethjuarez/cutready/commit/8868134eff8ebcad3bcea40c4940f684a8111112))
+* **video:** first end-to-end live narrated take ([#365](https://github.com/sethjuarez/cutready/issues/365)) ([e4092f2](https://github.com/sethjuarez/cutready/commit/e4092f2caae907243cce446378b3e8a54399e29e))
+* **video:** independent audit for live narrated takes ([#366](https://github.com/sethjuarez/cutready/issues/366)) ([b0d34a5](https://github.com/sethjuarez/cutready/commit/b0d34a58b26136c404ebb96b601ec39cc901a440))
+* **video:** Scenecast bundle export foundation with Elucim frame rendering ([#363](https://github.com/sethjuarez/cutready/issues/363)) ([bff099f](https://github.com/sethjuarez/cutready/commit/bff099f0ca68282b5bd2d686c5fc4e86d36f0760))
+
+
+### Bug Fixes
+
+* **chat:** write and delete promoted chat artifacts again ([1fc7185](https://github.com/sethjuarez/cutready/commit/1fc7185f19df7d00cba84bcc02956612c18edc20))
+
 ## [1.37.0](https://github.com/sethjuarez/cutready/compare/v1.36.1...v1.37.0) (2026-10-17)
 
 
