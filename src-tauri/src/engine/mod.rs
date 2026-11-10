@@ -3,6 +3,7 @@ pub mod agent_state;
 pub mod animation;
 pub mod automation;
 pub mod cli_registration;
+pub mod demo_timing;
 pub mod diagnostics_sanitizer;
 #[cfg(test)]
 mod document_goldens;
