@@ -30,6 +30,7 @@ cargo run -p cutready --example live_take -- src-tauri/examples/live-take-script
 - Options: `--out DIR`, `--headful` (watch the browser), `--max-takes N` (default 3), `--sidecar DIR`, `--no-stt`.
 - Other scripts in `src-tauri/examples/live-take-scripts/` are `fixture-tight.json`, `fixture-silence.json` and `playwright-dev-tiny-roi.json`.
 - Exit codes: `0` audit passed, `2` failed, `3` uncertain, `1` pipeline error, `64` bad arguments.
+- On a live site such as playwright.dev, a take is occasionally `Uncertain` with `witnessConflicts`. This happens when the DOM change lands a frame outside the witness band. Rerun it; the audit errs toward uncertain rather than passing on contradicting evidence.
 
 Each take goes to `.live-take-out/<script>-<timestamp>/`:
 
@@ -51,6 +52,8 @@ A live take audits itself at the end. To re-audit an existing take, which also r
 cargo run -p cutready --example live_take -- --audit-only .live-take-out/<take>
 cargo run -p cutready --example live_take -- --audit-only .live-take-out/<take> --no-stt
 ```
+
+Without transcription, the audit can't place the cue words, so a `--no-stt` audit always ends `Uncertain` (`sttSkipped`, exit `3`). Use it to regenerate the contact sheet, not to get a verdict.
 
 Open `contact-sheet.png` to check what was on screen at each cue. `docs/video/audit.md` explains the verdicts and the problem codes.
 
