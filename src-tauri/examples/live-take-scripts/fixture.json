@@ -1,0 +1,33 @@
+{
+  "schema": "cutready.live-take-script.v1",
+  "name": "fixture",
+  "narration": "Here is our little test page. First we open the panel to see what it holds. Then we type a short greeting into the box. Finally, we scroll down to the footer.",
+  "voice": "en-US-AvaMultilingualNeural",
+  "url": "../../../playwright-sidecar/spike/fixture.html",
+  "ready": { "selector": "#open" },
+  "viewport": { "width": 1280, "height": 720 },
+  "steps": [
+    {
+      "id": "open-panel",
+      "kind": "click",
+      "selectors": ["[data-testid=open-panel]", "#open"],
+      "cue": { "tokens": "open the panel" },
+      "postcondition": { "selector": "#panel" }
+    },
+    {
+      "id": "type-greeting",
+      "kind": "type",
+      "selectors": ["#name"],
+      "text": "hello",
+      "cue": { "tokens": "type" },
+      "postcondition": { "selector": "#name", "value": "hello" }
+    },
+    {
+      "id": "scroll-footer",
+      "kind": "scroll",
+      "dy": 900,
+      "cue": { "tokens": "scroll" },
+      "postcondition": { "scrollYAtLeast": 800 }
+    }
+  ]
+}

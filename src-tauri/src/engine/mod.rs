@@ -16,6 +16,7 @@ pub mod frame_sequence;
 pub mod github_provider;
 pub mod identity;
 pub mod interaction;
+pub mod live_take;
 pub mod media_cleanup;
 pub mod memory;
 pub mod narration_assets;

@@ -3,6 +3,7 @@ pub mod auditaur_policy;
 pub mod deep_link;
 pub mod ffmpeg;
 pub mod keyboard_hook;
+pub mod presentation_hotkeys;
 pub mod screenshot;
 pub mod sidecar;
 pub mod spawn;

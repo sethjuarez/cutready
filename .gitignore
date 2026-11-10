@@ -56,3 +56,6 @@ src-tauri/binaries/
 
 # Video calibration spike output
 .spike-out/
+
+# Live take outputs (MP4s, take.json, TTS cache)
+.live-take-out/

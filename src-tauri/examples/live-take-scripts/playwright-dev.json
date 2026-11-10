@@ -1,0 +1,32 @@
+{
+  "schema": "cutready.live-take-script.v1",
+  "name": "playwright-dev",
+  "narration": "This is the Playwright home page. Let's get started with the docs. We scroll through the installation guide, and then jump over to writing tests.",
+  "voice": "en-US-AvaMultilingualNeural",
+  "url": "https://playwright.dev/",
+  "ready": { "selector": "h1" },
+  "viewport": { "width": 1280, "height": 720 },
+  "steps": [
+    {
+      "id": "get-started",
+      "kind": "click",
+      "selectors": ["a.getStarted_Sjon", "a:has-text('Get started')"],
+      "cue": { "tokens": ["get", "started"] },
+      "postcondition": { "url": "/docs/intro" }
+    },
+    {
+      "id": "scroll-guide",
+      "kind": "scroll",
+      "dy": 700,
+      "cue": { "tokens": ["scroll"] },
+      "postcondition": { "scrollYAtLeast": 600 }
+    },
+    {
+      "id": "writing-tests",
+      "kind": "click",
+      "selectors": ["nav.menu a[href='/docs/writing-tests']", "a.menu__link:has-text('Writing tests')"],
+      "cue": { "tokens": ["writing", "tests"] },
+      "postcondition": { "url": "/docs/writing-tests" }
+    }
+  ]
+}

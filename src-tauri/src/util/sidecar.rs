@@ -244,6 +244,18 @@ impl SidecarManager {
         method: &str,
         params: serde_json::Value,
     ) -> Result<serde_json::Value, String> {
+        self.request_with_timeout(method, params, std::time::Duration::from_secs(30))
+            .await
+    }
+
+    /// [`Self::request`] with a caller-chosen timeout, for long operations
+    /// such as a recorded take or speech synthesis.
+    pub async fn request_with_timeout(
+        &self,
+        method: &str,
+        params: serde_json::Value,
+        timeout: std::time::Duration,
+    ) -> Result<serde_json::Value, String> {
         let id = {
             let mut next = self.next_id.lock().await;
             let current = *next;
@@ -280,14 +292,17 @@ impl SidecarManager {
                 .map_err(|e| format!("Failed to flush sidecar stdin: {e}"))?;
         }
 
-        match tokio::time::timeout(std::time::Duration::from_secs(30), rx).await {
+        match tokio::time::timeout(timeout, rx).await {
             Ok(Ok(result)) => result,
             Ok(Err(_)) => Err("Sidecar response channel dropped".to_string()),
             Err(_) => {
                 // Remove the pending entry on timeout
                 let mut map = self.pending.lock().await;
                 map.remove(&id);
-                Err("Sidecar request timed out after 30s".to_string())
+                Err(format!(
+                    "Sidecar request timed out after {}s",
+                    timeout.as_secs()
+                ))
             }
         }
     }

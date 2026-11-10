@@ -16,6 +16,9 @@ use util::sidecar::SidecarManager;
 
 mod commands;
 mod engine;
+
+#[doc(hidden)] // Headless live-take pipeline for `examples/live_take.rs`.
+pub use engine::live_take;
 mod models;
 mod util;
 
@@ -124,19 +127,6 @@ struct PresentationHotkeyBinding {
     hotkey: String,
 }
 
-fn presentation_hotkey_event(action: &str) -> Option<&'static str> {
-    match action {
-        "next" => Some("presentation-hotkey-next"),
-        "previous" => Some("presentation-hotkey-previous"),
-        "play_pause" => Some("presentation-hotkey-play-pause"),
-        "speed_up" => Some("presentation-hotkey-speed-up"),
-        "slow_down" => Some("presentation-hotkey-slow-down"),
-        "toggle_mode" => Some("presentation-hotkey-toggle-mode"),
-        "exit" => Some("presentation-hotkey-exit"),
-        _ => None,
-    }
-}
-
 static LAST_PRESENTATION_HOTKEY_EMIT: LazyLock<Mutex<HashMap<&'static str, Instant>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
@@ -206,7 +196,7 @@ fn configure_presentation_hotkeys(
             continue;
         }
 
-        let Some(event_name) = presentation_hotkey_event(binding.action.as_str()) else {
+        let Some(event_name) = util::presentation_hotkeys::event_name(binding.action.as_str()) else {
             tracing::warn!(
                 target: "cutready::hotkeys",
                 action = %binding.action,
